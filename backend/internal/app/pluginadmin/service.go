@@ -38,9 +38,21 @@ func (s *Service) List() []PluginMeta {
 			FrontendPages:      append([]sdk.FrontendPage(nil), item.FrontendPages...),
 			InstructionPresets: append([]string(nil), item.InstructionPresets...),
 			ConfigSchema:       append([]sdk.ConfigField(nil), item.ConfigSchema...),
+			Metadata:           cloneStringMap(item.Metadata),
 			HasWebAssets:       item.HasWebAssets,
 			IsDev:              item.IsDev,
 		})
+	}
+	return result
+}
+
+func cloneStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(input))
+	for key, value := range input {
+		result[key] = value
 	}
 	return result
 }

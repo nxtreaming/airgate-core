@@ -167,8 +167,9 @@ func TestPluginMappers(t *testing.T) {
 		AccountTypes:  []sdk.AccountType{{Key: "apikey", Label: "API Key"}},
 		FrontendPages: []sdk.FrontendPage{{Path: "/plugins/openai", Title: "OpenAI"}},
 		ConfigSchema:  []sdk.ConfigField{{Key: "base_url", Label: "Base URL", Type: "text"}},
+		Metadata:      map[string]string{"account.oauth_plans": `[{"key":"plus","label":"Plus"}]`},
 	})
-	if resp.Name != "gateway-openai" || len(resp.AccountTypes) != 1 || len(resp.FrontendPages) != 1 || len(resp.ConfigSchema) != 1 {
+	if resp.Name != "gateway-openai" || len(resp.AccountTypes) != 1 || len(resp.FrontendPages) != 1 || len(resp.ConfigSchema) != 1 || resp.Metadata["account.oauth_plans"] == "" {
 		t.Fatalf("插件响应异常: %+v", resp)
 	}
 

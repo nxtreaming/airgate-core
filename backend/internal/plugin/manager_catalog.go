@@ -219,6 +219,7 @@ func (m *Manager) GetAllPluginMeta() []PluginMeta {
 			Platform:           inst.Platform,
 			InstructionPresets: inst.InstructionPresets,
 			ConfigSchema:       cloneConfigSchema(inst.ConfigSchema),
+			Metadata:           cloneMetadata(inst.Metadata),
 			IsDev:              isDev,
 		}
 		if types, ok := m.accountTypeCache[inst.Platform]; ok {

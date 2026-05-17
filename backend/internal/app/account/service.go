@@ -154,6 +154,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (ListResult, erro
 	page, pageSize := NormalizePage(filter.Page, filter.PageSize)
 	filter.Page = page
 	filter.PageSize = pageSize
+	filter = s.normalizeListFilter(filter)
 
 	accounts, total, err := s.repo.List(ctx, filter)
 	if err != nil {
@@ -224,6 +225,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Account, error
 
 // ExportAll 查询符合筛选条件的全部账号（用于导出，不分页、不带并发计数）。
 func (s *Service) ExportAll(ctx context.Context, filter ListFilter) ([]Account, error) {
+	filter = s.normalizeListFilter(filter)
 	return s.repo.ListAll(ctx, filter)
 }
 

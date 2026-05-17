@@ -153,6 +153,105 @@
   margin: 0 !important;
 }
 
+.ag-account-type-select {
+  position: relative;
+}
+
+.ag-account-type-trigger {
+  align-items: center;
+}
+
+.ag-account-type-trigger-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ag-account-type-trigger-indicator {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ag-account-type-menu.select__popover {
+  position: absolute;
+  z-index: 70;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  width: 100%;
+  min-width: 100% !important;
+  overflow: visible !important;
+  padding: 0.375rem;
+}
+
+.ag-account-type-menu-item,
+.ag-account-type-submenu-item {
+  display: flex;
+  width: 100%;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--overlay-foreground);
+  cursor: pointer;
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.ag-account-type-menu-item:hover,
+.ag-account-type-menu-item:focus-visible,
+.ag-account-type-submenu-item:hover,
+.ag-account-type-submenu-item:focus-visible {
+  background: color-mix(in oklab, var(--default) 82%, var(--background) 18%);
+  outline: none;
+}
+
+.ag-account-type-cascade-row {
+  position: relative;
+}
+
+.ag-account-type-submenu-bridge {
+  position: absolute;
+  top: -0.375rem;
+  left: 100%;
+  width: 0.5rem;
+  height: calc(100% + 0.75rem);
+}
+
+.ag-account-type-submenu {
+  position: absolute;
+  z-index: 80;
+  top: 0;
+  left: calc(100% + 0.5rem);
+  display: flex;
+  min-width: 9rem;
+  max-width: min(18rem, calc(100vw - 2rem));
+  max-height: min(28rem, calc(100dvh - 6rem));
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow: auto;
+  padding: 0.375rem;
+  border: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  border-radius: var(--radius-3xl);
+  background: var(--overlay);
+  color: var(--overlay-foreground);
+  box-shadow: var(--overlay-shadow);
+}
+
+.ag-account-type-submenu-loading {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  padding-inline: 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 .ag-account-row-actions {
   height: 1.75rem;
   line-height: 1;

@@ -40,6 +40,7 @@ type PluginMeta struct {
 	FrontendPages      []sdk.FrontendPage
 	InstructionPresets []string
 	ConfigSchema       []sdk.ConfigField
+	Metadata           map[string]string
 	HasWebAssets       bool
 	IsDev              bool
 }

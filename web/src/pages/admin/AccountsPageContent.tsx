@@ -11,6 +11,7 @@ import {
   BarChart3,
   RefreshCw,
   ChevronDown,
+  ChevronRight,
   Search,
   Download,
   Upload,
@@ -68,6 +69,12 @@ interface AccountTableColumn {
 
 const UNGROUPED_GROUP_FILTER = '__ungrouped__';
 type SelectionListener = () => void;
+type AccountTypeFilterOption = {
+  id: string;
+  label: string;
+  planLabel?: string;
+  platformLabel?: string;
+};
 type AccountUsageTodayStats = { requests: number; tokens: number; account_cost: number; user_cost: number };
 type AccountUsageCredits = { balance: number; unlimited: boolean };
 type AccountUsageWindow = {
@@ -91,6 +98,19 @@ type CachedUsageWindow = {
   window: AccountUsageWindow;
 };
 type AccountUsageWindowCache = Map<string, CachedUsageWindow>;
+
+function renderAccountTypeFilterOption(option: AccountTypeFilterOption, showOAuthLabel = true): ReactNode {
+  if (!option.planLabel) return option.label;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {option.platformLabel ? <span className="truncate">{option.platformLabel}</span> : null}
+      {showOAuthLabel ? <span className="truncate">OAuth</span> : null}
+      <Chip color="accent" size="sm" variant="soft">
+        {option.planLabel}
+      </Chip>
+    </span>
+  );
+}
 
 function getUsageWindowIdentity(window: AccountUsageWindow) {
   const key = window.key?.trim();
@@ -890,7 +910,7 @@ function AccountCapacityChip({ current, max }: { current: number; max: number })
 export default function AccountsPageContent() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { platforms, platformName: resolvePlatformName } = usePlatforms();
+  const { platforms, platformName: resolvePlatformName, oauthPlanFilters, isLoading: platformsLoading } = usePlatforms();
   const platformNameRef = useLatestRef(resolvePlatformName);
   const platformName = useCallback((platform: string) => platformNameRef.current(platform), [platformNameRef]);
   const platformsKey = platforms.join('\u0000');
@@ -949,8 +969,35 @@ export default function AccountsPageContent() {
   const [platformFilter, setPlatformFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
+  const [isOAuthPlanMenuOpen, setIsOAuthPlanMenuOpen] = useState(false);
+  const typeFilterMenuRef = useRef<HTMLDivElement>(null);
   const [groupFilter, setGroupFilter] = useState('');
   const [proxyFilter, setProxyFilter] = useState('');
+  const closeTypeFilterMenu = useCallback(() => {
+    setIsTypeMenuOpen(false);
+    setIsOAuthPlanMenuOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isTypeMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && typeFilterMenuRef.current?.contains(target)) return;
+      closeTypeFilterMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeTypeFilterMenu();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeTypeFilterMenu, isTypeMenuOpen]);
 
   // 自动刷新
   const AUTO_REFRESH_OPTIONS = [0, 5, 10, 15, 30];
@@ -1872,11 +1919,19 @@ export default function AccountsPageContent() {
   const setRowSelected = useCallback((id: number, isSelected: boolean) => {
     runAfterInputFrame(() => selectionStore.setRow(id, isSelected));
   }, [selectionStore]);
-  const typeOptions = useMemo(() => [
+  const typeOptions = useMemo<AccountTypeFilterOption[]>(() => [
     { id: '', label: t('accounts.all_types', '全部类型') },
     { id: 'oauth', label: 'OAuth' },
     { id: 'apikey', label: 'API Key' },
   ], [t]);
+  const oauthPlanOptions = useMemo<AccountTypeFilterOption[]>(() => oauthPlanFilters
+    .filter((item) => !platformFilter || item.platform === platformFilter)
+    .map((item) => ({
+      id: item.id,
+      label: platformFilter ? `OAuth ${item.planLabel}` : `${item.platformLabel} OAuth ${item.planLabel}`,
+      platformLabel: platformFilter ? undefined : item.platformLabel,
+      planLabel: item.planLabel,
+    })), [oauthPlanFilters, platformFilter]);
   const groupOptions = useMemo(() => [
     { id: '', label: t('accounts.all_groups') },
     { id: UNGROUPED_GROUP_FILTER, label: t('accounts.ungrouped') },
@@ -1888,24 +1943,20 @@ export default function AccountsPageContent() {
   ], [allProxiesData?.list, t]);
   const selectedPlatformLabel = PLATFORM_OPTIONS.find((item) => item.id === platformFilter)?.label ?? t('accounts.all_platforms');
   const selectedStateLabel = STATE_OPTIONS.find((item) => item.id === stateFilter)?.label ?? t('users.all_status');
-  const selectedTypeLabel = typeOptions.find((item) => item.id === typeFilter)?.label ?? t('accounts.all_types', '全部类型');
+  const selectedTypeOption = typeOptions.find((item) => item.id === typeFilter)
+    ?? oauthPlanOptions.find((item) => item.id === typeFilter);
+  const selectedTypeLabel = selectedTypeOption?.label ?? t('accounts.all_types', '全部类型');
+  const selectedTypeNode = selectedTypeOption ? renderAccountTypeFilterOption(selectedTypeOption) : selectedTypeLabel;
   const selectedGroupLabel = groupOptions.find((item) => item.id === groupFilter)?.label ?? t('accounts.all_groups');
   const selectedProxyLabel = proxyOptions.find((item) => item.id === proxyFilter)?.label ?? t('accounts.all_proxies');
-  const clearAllFilters = () => {
-    setPlatformFilter('');
-    setStateFilter('');
-    setTypeFilter('');
-    setGroupFilter('');
-    setProxyFilter('');
+  useEffect(() => {
+    if (!typeFilter) return;
+    if (typeOptions.some((item) => item.id === typeFilter)) return;
+    if (oauthPlanOptions.some((item) => item.id === typeFilter)) return;
+    if (typeFilter.startsWith('oauth_plan:') && platformsLoading) return;
+    setTypeFilter(typeFilter.startsWith('oauth_plan:') ? 'oauth' : '');
     setPage(1);
-  };
-  const activeFilterCount = [
-    platformFilter,
-    stateFilter,
-    typeFilter,
-    groupFilter,
-    proxyFilter,
-  ].filter(Boolean).length;
+  }, [oauthPlanOptions, platformsLoading, setPage, typeFilter, typeOptions]);
   const toolbarFilters = [
     {
       key: 'platform',
@@ -1929,7 +1980,7 @@ export default function AccountsPageContent() {
       key: 'type',
       label: t('common.type'),
       value: typeFilter,
-      selectedLabel: selectedTypeLabel,
+      selectedLabel: selectedTypeNode,
       options: typeOptions,
       setValue: setTypeFilter,
       widthClass: 'w-full sm:w-48',
@@ -1953,6 +2004,98 @@ export default function AccountsPageContent() {
       widthClass: 'w-full sm:w-48',
     },
   ];
+  const selectTypeFilter = useCallback((nextValue: string) => {
+    setTypeFilter(nextValue);
+    setPage(1);
+    closeTypeFilterMenu();
+  }, [closeTypeFilterMenu, setPage]);
+  const renderTypeFilterMenu = () => (
+    <div ref={typeFilterMenuRef} className="select select--full-width ag-account-type-select">
+      <button
+        type="button"
+        aria-label={t('common.type')}
+        aria-haspopup="menu"
+        aria-expanded={isTypeMenuOpen}
+        className="select__trigger select__trigger--full-width ag-account-type-trigger"
+        onClick={() => {
+          setIsTypeMenuOpen((open) => {
+            if (open) setIsOAuthPlanMenuOpen(false);
+            return !open;
+          });
+        }}
+      >
+        <span className="select__value ag-account-type-trigger-value">{selectedTypeNode}</span>
+        <ChevronDown
+          className="select__indicator ag-account-type-trigger-indicator"
+          data-open={isTypeMenuOpen ? 'true' : undefined}
+        />
+      </button>
+      {isTypeMenuOpen ? (
+        <div className="select__popover ag-account-type-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className="ag-account-type-menu-item"
+            onPointerEnter={() => setIsOAuthPlanMenuOpen(false)}
+            onFocus={() => setIsOAuthPlanMenuOpen(false)}
+            onClick={() => selectTypeFilter('')}
+          >
+            {typeOptions[0]?.label ?? t('accounts.all_types', '全部类型')}
+          </button>
+          <div
+            className="ag-account-type-cascade-row"
+            onPointerEnter={() => setIsOAuthPlanMenuOpen(true)}
+            onPointerLeave={() => setIsOAuthPlanMenuOpen(false)}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="ag-account-type-menu-item"
+              onFocus={() => setIsOAuthPlanMenuOpen(true)}
+              onClick={() => selectTypeFilter('oauth')}
+            >
+              <span className="truncate">OAuth</span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+            </button>
+            {isOAuthPlanMenuOpen ? (
+              <>
+                <span aria-hidden="true" className="ag-account-type-submenu-bridge" />
+                <div className="ag-account-type-submenu" role="menu">
+                  {oauthPlanOptions.length > 0 ? (
+                    oauthPlanOptions.map((plan) => (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        role="menuitem"
+                        className="ag-account-type-submenu-item"
+                        onClick={() => selectTypeFilter(plan.id)}
+                      >
+                        {renderAccountTypeFilterOption(plan, false)}
+                      </button>
+                    ))
+                  ) : platformsLoading ? (
+                    <span className="ag-account-type-submenu-loading">{t('common.loading')}</span>
+                  ) : (
+                    <span className="ag-account-type-submenu-loading">{t('accounts.no_oauth_plans', '暂无套餐')}</span>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="ag-account-type-menu-item"
+            onPointerEnter={() => setIsOAuthPlanMenuOpen(false)}
+            onFocus={() => setIsOAuthPlanMenuOpen(false)}
+            onClick={() => selectTypeFilter('apikey')}
+          >
+            API Key
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
   return (
     <div>
       <div className="mb-5 flex min-h-12 flex-col gap-3 xl:flex-row xl:items-start">
@@ -1977,43 +2120,38 @@ export default function AccountsPageContent() {
                 key={filter.key}
                 className={filter.widthClass}
               >
-                <Select
-                  aria-label={filter.label}
-                  fullWidth
-                  selectedKey={filter.value}
-                  onSelectionChange={(key) => {
-                    filter.setValue(key == null ? '' : String(key));
-                    setPage(1);
-                  }}
-                >
-                  <Label className="sr-only">{filter.label}</Label>
-                  <Select.Trigger>
-                    <Select.Value>{filter.selectedLabel}</Select.Value>
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox items={filter.options}>
-                      {(item) => (
-                        <ListBox.Item id={item.id} textValue={item.label}>
-                          {item.label}
-                        </ListBox.Item>
-                      )}
-                    </ListBox>
-                  </Select.Popover>
-                </Select>
+                {filter.key === 'type' ? renderTypeFilterMenu() : (
+                  <Select
+                    aria-label={filter.label}
+                    fullWidth
+                    selectedKey={filter.value}
+                    onSelectionChange={(key) => {
+                      const nextValue = key == null ? '' : String(key);
+                      filter.setValue(nextValue);
+                      setPage(1);
+                    }}
+                  >
+                    <Label className="sr-only">{filter.label}</Label>
+                    <Select.Trigger>
+                      <Select.Value>{filter.selectedLabel}</Select.Value>
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox items={filter.options}>
+                        {(item) => (
+                          <ListBox.Item
+                            id={item.id}
+                            textValue={item.label}
+                          >
+                            {item.label}
+                          </ListBox.Item>
+                        )}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                )}
               </div>
             ))}
-            {activeFilterCount > 0 ? (
-              <Button
-                className="whitespace-nowrap"
-                size="sm"
-                variant="ghost"
-                onPress={clearAllFilters}
-              >
-                <Eraser className="h-3.5 w-3.5" />
-                {t('common.clear')}
-              </Button>
-            ) : null}
           </div>
         </div>
 
