@@ -122,9 +122,18 @@ func (s *Service) EmailExists(ctx context.Context, email string) (bool, error) {
 }
 
 // RefreshToken 刷新 JWT。
-func (s *Service) RefreshToken(identity AuthIdentity) (string, error) {
+func (s *Service) RefreshToken(ctx context.Context, identity AuthIdentity) (string, error) {
 	if identity.APIKeyID > 0 {
-		token, err := s.jwtMgr.GenerateAPIKeyToken(identity.UserID, identity.Role, identity.Email, identity.APIKeyID)
+		user, err := s.repo.ValidateAPIKeySession(ctx, identity.UserID, identity.APIKeyID)
+		if err != nil {
+			slog.Default().Warn("api_key_session_refresh_rejected",
+				sdk.LogFieldUserID, identity.UserID,
+				sdk.LogFieldAPIKeyID, identity.APIKeyID,
+				sdk.LogFieldError, err,
+			)
+			return "", err
+		}
+		token, err := s.jwtMgr.GenerateAPIKeyToken(user.ID, corauth.APIKeySessionRole, user.Email, identity.APIKeyID)
 		if err != nil {
 			slog.Default().Error("jwt_issue_failed",
 				sdk.LogFieldUserID, identity.UserID,

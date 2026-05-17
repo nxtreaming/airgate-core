@@ -92,11 +92,7 @@ function pluginPagePath(pluginName: string, pagePath: string) {
   return `/plugins/${pluginName}${pagePath}`;
 }
 
-function isStandalonePluginPath(path: string) {
-  return path === '/chat' || path === '/studio' || path === '/plugins/playground' || path.includes('/plugins/airgate-playground/');
-}
-
-function usePluginMenuItems(isAdmin: boolean): {
+function usePluginMenuItems(isAdmin: boolean, isAPIKeySession: boolean): {
   adminItems: MenuItem[];
   userItems: MenuItem[];
   healthInstalled: boolean;
@@ -104,6 +100,7 @@ function usePluginMenuItems(isAdmin: boolean): {
   const { data } = useQuery({
     queryKey: queryKeys.pluginsMenu(),
     queryFn: () => pluginsApi.menu(),
+    enabled: !isAPIKeySession,
     staleTime: 60_000,
   });
 
@@ -186,8 +183,8 @@ export function AppShell({ children }: AppShellProps) {
     }
   }, [mobileOpen]);
 
-  const isAdmin = getTokenRole() === 'admin' || user?.role === 'admin';
   const isAPIKeySession = !!(user?.api_key_id && user.api_key_id > 0);
+  const isAdmin = !isAPIKeySession && (getTokenRole() === 'admin' || user?.role === 'admin');
 
   // 仅管理员拉取 core 版本号；普通用户和 API Key 会话不暴露版本指纹。
   const { data: coreVersion } = useQuery({
@@ -197,7 +194,7 @@ export function AppShell({ children }: AppShellProps) {
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
-  const { adminItems: pluginAdminItems, userItems: pluginUserItems, healthInstalled } = usePluginMenuItems(isAdmin);
+  const { adminItems: pluginAdminItems, userItems: pluginUserItems, healthInstalled } = usePluginMenuItems(isAdmin, isAPIKeySession);
   const showStatusEntry = healthInstalled;
   const sections = useMemo(() => {
     const adminUserItems = userMenuItems
@@ -209,9 +206,8 @@ export function AppShell({ children }: AppShellProps) {
     const pluginUserItemsMerged = pluginUserItems.map((item, i) =>
       i === 0 ? { path: item.path, labelKey: item.labelKey, icon: item.icon } : item,
     );
-    const apiKeyPluginItems = pluginUserItemsMerged.filter((item) => isStandalonePluginPath(item.path));
     const menuItems = isAPIKeySession
-      ? [...apiKeyMenuItems, ...apiKeyPluginItems]
+      ? apiKeyMenuItems
       : isAdmin
         ? [...adminMenuItems, ...pluginAdminItems, ...adminUserItems, ...pluginUserItemsMerged]
         : [...userMenuItems, ...pluginUserItemsMerged];

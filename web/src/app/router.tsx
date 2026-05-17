@@ -9,7 +9,7 @@ import { Suspense, useEffect } from 'react';
 import type { ElementType, ReactNode } from 'react';
 import { useAuth } from './providers/AuthProvider';
 import { ErrorBoundary } from './providers/ErrorBoundary';
-import { getToken, getTokenRole } from '../shared/api/client';
+import { getToken, getTokenAPIKeyID, getTokenRole } from '../shared/api/client';
 import { ChatPageLoading, FullPageLoading, PageLoading } from '../shared/components/PageLoading';
 import { checkAdmin, withSetupCheck } from './routeGuards';
 import {
@@ -68,7 +68,7 @@ function RoutePreloader() {
     if (!hasUser) return;
 
     const pages = isAPIKeySession
-      ? [UserUsagePage, PluginPage]
+      ? [UserUsagePage]
       : userRole === 'admin'
         ? ADMIN_IDLE_PRELOADS
         : USER_IDLE_PRELOADS;
@@ -185,7 +185,7 @@ function HomePage() {
   if (loading) return <PageLoading />;
   if (!user) return null;
 
-  const isAdmin = getTokenRole() === 'admin' || user.role === 'admin';
+  const isAdmin = !isAPIKeySession && (getTokenRole() === 'admin' || user.role === 'admin');
   const Page = isAPIKeySession ? UserUsagePage : isAdmin ? DashboardPage : UserOverviewPage;
   return (
     <Suspense fallback={<PageLoading />}>
@@ -229,6 +229,7 @@ const userUsageRoute = createRoute({ getParentRoute: () => authLayout, path: '/u
 const chatBeforeLoad = () => withSetupCheck((needs) => {
   if (needs) throw redirect({ to: '/setup' });
   if (!getToken()) throw redirect({ to: '/home' });
+  if (getTokenAPIKeyID()) throw redirect({ to: '/' });
 });
 const chatRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -268,6 +269,9 @@ const playgroundLegacyRoute = createRoute({
 const pluginRoute = createRoute({
   getParentRoute: () => authLayout,
   path: '/plugins/$pluginName/$',
+  beforeLoad: () => {
+    if (getTokenAPIKeyID()) throw redirect({ to: '/' });
+  },
   component: () => (
     <Suspense fallback={<PageLoading />}>
       <PluginPage />

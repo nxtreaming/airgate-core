@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	appuser "github.com/DouDOU-start/airgate-core/internal/app/user"
+	corauth "github.com/DouDOU-start/airgate-core/internal/auth"
 	"github.com/DouDOU-start/airgate-core/internal/server/dto"
 	"github.com/DouDOU-start/airgate-core/internal/server/middleware"
 	"github.com/DouDOU-start/airgate-core/internal/server/response"
@@ -30,6 +31,7 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	// API Key 登录场景：附带 Key 信息（名称、额度、到期时间）
 	if apiKeyID, exists := c.Get(middleware.CtxKeyAPIKeyID); exists {
 		if id, ok := apiKeyID.(int); ok && id > 0 {
+			resp.Role = corauth.APIKeySessionRole
 			resp.APIKeyID = int64(id)
 			if info, err := h.service.GetAPIKeyInfo(c.Request.Context(), id); err == nil {
 				resp.APIKeyName = info.Name

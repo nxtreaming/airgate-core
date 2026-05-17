@@ -13,6 +13,8 @@ var (
 	ErrTokenExpired = errors.New("token 已过期")
 )
 
+const APIKeySessionRole = "user"
+
 // Claims JWT 自定义声明
 type Claims struct {
 	UserID   int    `json:"user_id"`
@@ -77,12 +79,14 @@ func (m *JWTManager) ParseToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-// GenerateAPIKeyToken 签发 API Key 登录 Token
-func (m *JWTManager) GenerateAPIKeyToken(userID int, role, email string, apiKeyID int) (string, error) {
+// GenerateAPIKeyToken 签发 API Key 登录 Token。
+// API Key 登录是受限会话，只能访问该 Key 允许的用户级资源；无论 Key 归属用户是否为管理员，
+// 都不能继承管理员角色。
+func (m *JWTManager) GenerateAPIKeyToken(userID int, _ string, email string, apiKeyID int) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID:   userID,
-		Role:     role,
+		Role:     APIKeySessionRole,
 		Email:    email,
 		APIKeyID: apiKeyID,
 		RegisteredClaims: jwt.RegisteredClaims{

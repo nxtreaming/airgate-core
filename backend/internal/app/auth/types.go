@@ -67,4 +67,5 @@ type Repository interface {
 	EmailExists(context.Context, string) (bool, error)
 	Create(context.Context, CreateUserInput) (User, error)
 	FindByID(context.Context, int, bool) (User, error)
+	ValidateAPIKeySession(context.Context, int, int) (User, error)
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -88,8 +89,8 @@ func (h *AuthHandler) LoginByAPIKey(c *gin.Context) {
 		return
 	}
 
-	// 签发带 api_key_id 的 JWT
-	token, err := h.jwtMgr.GenerateAPIKeyToken(user.ID, user.Role, user.Email, info.KeyID)
+	// 签发带 api_key_id 的受限 JWT。API Key 登录不继承管理员角色。
+	token, err := h.jwtMgr.GenerateAPIKeyToken(user.ID, auth.APIKeySessionRole, user.Email, info.KeyID)
 	if err != nil {
 		response.InternalError(c, "生成 Token 失败")
 		return
@@ -98,6 +99,7 @@ func (h *AuthHandler) LoginByAPIKey(c *gin.Context) {
 	// 填充 API Key 维度的字段（额度 / 已用 / 到期时间），与 GetMe 行为对齐，
 	// 否则前端首屏拿不到 quota，会先显示"无限"再因 /me 刷新而跳变。
 	userResp := userToResp(user)
+	userResp.Role = auth.APIKeySessionRole
 	userResp.APIKeyID = int64(info.KeyID)
 	userResp.APIKeyName = info.KeyName
 	if keyInfo, err := h.userService.GetAPIKeyInfo(c.Request.Context(), info.KeyID); err == nil {
@@ -300,8 +302,16 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		APIKeyID: claims.APIKeyID,
 	}
 
-	token, err := h.service.RefreshToken(identity)
+	token, err := h.service.RefreshToken(c.Request.Context(), identity)
 	if err != nil {
+		if errors.Is(err, appauth.ErrInvalidAPIKeySession) {
+			response.Unauthorized(c, "API Key 登录会话已失效，请重新登录")
+			return
+		}
+		if errors.Is(err, appauth.ErrUserDisabled) {
+			response.Forbidden(c, "用户已被禁用")
+			return
+		}
 		response.InternalError(c, "刷新 Token 失败")
 		return
 	}

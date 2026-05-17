@@ -146,9 +146,9 @@ func TestRefreshTokenPreservesAPIKeyIdentity(t *testing.T) {
 	jwtMgr := corauth.NewJWTManager("secret", 24)
 	service := NewService(authStubRepository{}, jwtMgr)
 
-	token, err := service.RefreshToken(AuthIdentity{
+	token, err := service.RefreshToken(t.Context(), AuthIdentity{
 		UserID:   5,
-		Role:     "user",
+		Role:     "admin",
 		Email:    "u@test.com",
 		APIKeyID: 13,
 	})
@@ -159,8 +159,27 @@ func TestRefreshTokenPreservesAPIKeyIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("解析刷新 token 失败: %v", err)
 	}
-	if claims.UserID != 5 || claims.APIKeyID != 13 {
+	if claims.UserID != 5 || claims.APIKeyID != 13 || claims.Role != corauth.APIKeySessionRole {
 		t.Fatalf("刷新 claims 异常: %+v", claims)
+	}
+}
+
+func TestRefreshTokenRejectsInvalidAPIKeySession(t *testing.T) {
+	jwtMgr := corauth.NewJWTManager("secret", 24)
+	service := NewService(authStubRepository{
+		validateAPIKeySession: func(_ int, _ int) (User, error) {
+			return User{}, ErrInvalidAPIKeySession
+		},
+	}, jwtMgr)
+
+	_, err := service.RefreshToken(t.Context(), AuthIdentity{
+		UserID:   5,
+		Role:     "user",
+		Email:    "u@test.com",
+		APIKeyID: 13,
+	})
+	if !errors.Is(err, ErrInvalidAPIKeySession) {
+		t.Fatalf("刷新错误 = %v，期望 %v", err, ErrInvalidAPIKeySession)
 	}
 }
 
@@ -186,10 +205,11 @@ func TestFindAndEmailDelegatesToRepository(t *testing.T) {
 }
 
 type authStubRepository struct {
-	findByEmail func() (User, error)
-	emailExists func() (bool, error)
-	create      func(CreateUserInput) (User, error)
-	findByID    func() (User, error)
+	findByEmail           func() (User, error)
+	emailExists           func() (bool, error)
+	create                func(CreateUserInput) (User, error)
+	findByID              func() (User, error)
+	validateAPIKeySession func(userID, keyID int) (User, error)
 }
 
 func (s authStubRepository) FindByEmail(_ context.Context, _ string) (User, error) {
@@ -227,4 +247,14 @@ func (s authStubRepository) FindByID(_ context.Context, _ int, _ bool) (User, er
 		return User{}, ErrUserNotFound
 	}
 	return s.findByID()
+}
+
+func (s authStubRepository) ValidateAPIKeySession(_ context.Context, userID, keyID int) (User, error) {
+	if s.validateAPIKeySession != nil {
+		return s.validateAPIKeySession(userID, keyID)
+	}
+	if userID <= 0 || keyID <= 0 {
+		return User{}, ErrInvalidAPIKeySession
+	}
+	return User{ID: userID, Email: "u@test.com", Role: "admin", Status: "active"}, nil
 }

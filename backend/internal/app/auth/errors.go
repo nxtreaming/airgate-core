@@ -11,4 +11,6 @@ var (
 	ErrEmailAlreadyExists = errors.New("邮箱已注册")
 	// ErrUserNotFound 用户不存在。
 	ErrUserNotFound = errors.New("用户不存在")
+	// ErrInvalidAPIKeySession API Key 登录会话已失效。
+	ErrInvalidAPIKeySession = errors.New("API Key 登录会话已失效")
 )

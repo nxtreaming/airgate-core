@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/DouDOU-start/airgate-core/ent"
+	entapikey "github.com/DouDOU-start/airgate-core/ent/apikey"
 	entuser "github.com/DouDOU-start/airgate-core/ent/user"
 	appauth "github.com/DouDOU-start/airgate-core/internal/app/auth"
 )
@@ -70,6 +72,36 @@ func (s *AuthStore) FindByID(ctx context.Context, id int, withAllowedGroups bool
 		return appauth.User{}, err
 	}
 	return mapAuthUser(item), nil
+}
+
+// ValidateAPIKeySession 校验 API Key scoped JWT 仍然对应一把有效的 Key 和 active 用户。
+func (s *AuthStore) ValidateAPIKeySession(ctx context.Context, userID, keyID int) (appauth.User, error) {
+	ak, err := s.db.APIKey.Query().
+		Where(
+			entapikey.IDEQ(keyID),
+			entapikey.StatusEQ(entapikey.StatusActive),
+			entapikey.HasUserWith(entuser.IDEQ(userID)),
+		).
+		WithUser().
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return appauth.User{}, appauth.ErrInvalidAPIKeySession
+		}
+		return appauth.User{}, err
+	}
+	if ak.ExpiresAt != nil && ak.ExpiresAt.Before(time.Now()) {
+		return appauth.User{}, appauth.ErrInvalidAPIKeySession
+	}
+
+	user, err := ak.Edges.UserOrErr()
+	if err != nil {
+		return appauth.User{}, appauth.ErrInvalidAPIKeySession
+	}
+	if user.Status != entuser.StatusActive {
+		return appauth.User{}, appauth.ErrUserDisabled
+	}
+	return mapAuthUser(user), nil
 }
 
 func mapAuthUser(item *ent.User) appauth.User {
