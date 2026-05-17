@@ -122,6 +122,42 @@ func TestShouldPersistQuotaExtraAllowsClearingPlanMetadata(t *testing.T) {
 	}
 }
 
+func TestShouldAutoRefreshQuotaSkipsPureAPIKeyAccounts(t *testing.T) {
+	cases := []struct {
+		name string
+		item Account
+		want bool
+	}{
+		{
+			name: "apikey type",
+			item: Account{Type: "apikey", Credentials: map[string]string{"api_key": "sk-test"}},
+			want: false,
+		},
+		{
+			name: "legacy api key credentials without type",
+			item: Account{Credentials: map[string]string{"api_key": "sk-test"}},
+			want: false,
+		},
+		{
+			name: "oauth access token",
+			item: Account{Type: "oauth", Credentials: map[string]string{"access_token": "at"}},
+			want: true,
+		},
+		{
+			name: "oauth refresh token",
+			item: Account{Type: "oauth", Credentials: map[string]string{"refresh_token": "rt"}},
+			want: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldAutoRefreshQuota(tc.item); got != tc.want {
+				t.Fatalf("shouldAutoRefreshQuota() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 type stubRepository struct {
 	create   func(context.Context, CreateInput) (Account, error)
 	findByID func(context.Context, int, LoadOptions) (Account, error)

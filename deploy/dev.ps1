@@ -158,6 +158,10 @@ function Invoke-InDir([string]$Directory, [string]$Command) {
   }
 }
 
+function Get-GoEnvCommand([string]$Command) {
+  "`$env:GOTOOLCHAIN = 'local'; `$env:GOPRIVATE = 'github.com/DouDOU-start/airgate-sdk'; `$env:GONOPROXY = 'github.com/DouDOU-start/airgate-sdk'; `$env:GONOSUMDB = 'github.com/DouDOU-start/airgate-sdk'; $Command"
+}
+
 function Assert-Command([string]$Name) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     throw "Missing command: $Name"
@@ -215,11 +219,11 @@ function Install-Deps {
   Invoke-PnpmInstall $SdkTheme
   Invoke-InDir $SdkTheme "pnpm build"
   Invoke-PnpmInstall $WebDir -Force
-  Invoke-InDir $BackendDir "`$env:GOTOOLCHAIN = 'local'; go mod download"
+  Invoke-InDir $BackendDir (Get-GoEnvCommand "go mod download")
   foreach ($plugin in $PluginSpecs) {
     Ensure-PluginGoWork $plugin
     Invoke-PnpmInstall $plugin.WebDir -Force
-    Invoke-InDir $plugin.BackendDir "`$env:GOTOOLCHAIN = 'local'; go mod download"
+    Invoke-InDir $plugin.BackendDir (Get-GoEnvCommand "go mod download")
   }
 }
 
@@ -376,7 +380,7 @@ function Build-Plugin($Plugin) {
   Sync-PluginWebdist $Plugin
 
   New-Item -ItemType Directory -Force -Path (Join-Path $Plugin.Root "bin") | Out-Null
-  Invoke-InDir $Plugin.BackendDir "`$env:GOTOOLCHAIN = 'local'; go build -o ..\bin\$($Plugin.Name) ."
+  Invoke-InDir $Plugin.BackendDir (Get-GoEnvCommand "go build -o ..\bin\$($Plugin.Name) .")
 }
 
 function Build-All {
@@ -520,7 +524,7 @@ function Start-Dev {
 
   $backend = Start-Process `
     -FilePath "pwsh" `
-    -ArgumentList @("-NoLogo", "-NoProfile", "-Command", "`$env:GOTOOLCHAIN = 'local'; go run ./cmd/server --config '$configArg'") `
+    -ArgumentList @("-NoLogo", "-NoProfile", "-Command", (Get-GoEnvCommand "go run ./cmd/server --config '$configArg'")) `
     -WorkingDirectory $BackendDir `
     -WindowStyle Hidden `
     -RedirectStandardOutput $BackendOut `

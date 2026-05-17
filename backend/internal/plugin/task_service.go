@@ -301,9 +301,15 @@ func (h *HostService) getTask(ctx context.Context, pluginID string, req hostGetT
 	return map[string]interface{}{"task": taskToPayload(t)}, nil
 }
 
-func (h *HostService) listTasks(ctx context.Context, _ string, req hostListTasksRequest) (map[string]interface{}, error) {
+func (h *HostService) listTasks(ctx context.Context, pluginID string, req hostListTasksRequest) (map[string]interface{}, error) {
 	query := h.db.Task.Query()
 
+	if req.PluginID != "" {
+		pluginID = req.PluginID
+	}
+	if pluginID != "" {
+		query.Where(enttask.PluginIDEQ(pluginID))
+	}
 	if req.UserID > 0 {
 		query.Where(enttask.UserIDEQ(int(req.UserID)))
 	}

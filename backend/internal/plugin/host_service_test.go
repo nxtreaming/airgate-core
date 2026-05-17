@@ -117,6 +117,42 @@ func TestTaskPublicIDIsIndependentFromIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestListTasksFiltersByPluginID(t *testing.T) {
+	ctx := context.Background()
+	db := enttest.Open(t, "sqlite3", "file:list_tasks_plugin_id?mode=memory&cache=shared&_fk=1", enttest.WithMigrateOptions(schema.WithGlobalUniqueID(false)))
+	t.Cleanup(func() { _ = db.Close() })
+
+	host := &HostService{db: db}
+	for _, pluginID := range []string{"gateway-openai", "other-plugin"} {
+		if _, err := host.createTask(ctx, pluginID, hostCreateTaskRequest{
+			UserID:   42,
+			TaskType: "image.generate",
+			Input:    map[string]interface{}{"prompt": pluginID},
+		}); err != nil {
+			t.Fatalf("create task for %s: %v", pluginID, err)
+		}
+	}
+
+	got, err := host.listTasks(ctx, "airgate-studio", hostListTasksRequest{
+		PluginID: "gateway-openai",
+		UserID:   42,
+		Limit:    20,
+	})
+	if err != nil {
+		t.Fatalf("list tasks: %v", err)
+	}
+	tasks, ok := got["tasks"].([]map[string]interface{})
+	if !ok {
+		t.Fatalf("tasks payload type = %T", got["tasks"])
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks len = %d, want 1: %+v", len(tasks), tasks)
+	}
+	if tasks[0]["plugin_id"] != "gateway-openai" {
+		t.Fatalf("plugin_id = %v, want gateway-openai", tasks[0]["plugin_id"])
+	}
+}
+
 func TestCheckHostForwardBalance(t *testing.T) {
 	ctx := context.Background()
 	db := enttest.Open(t, "sqlite3", "file:host_forward_balance?mode=memory&cache=shared&_fk=1", enttest.WithMigrateOptions(schema.WithGlobalUniqueID(false)))

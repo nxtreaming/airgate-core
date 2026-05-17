@@ -25,7 +25,7 @@ KIRO_ASSETS := $(BACKEND_DIR)/data/plugins/gateway-kiro/assets
 STUDIO_ASSETS := $(BACKEND_DIR)/data/plugins/airgate-studio/assets
 BINARY := $(BACKEND_DIR)/server
 WEBDIST := $(BACKEND_DIR)/internal/web/webdist
-GO := GOTOOLCHAIN=local go
+GO := GOTOOLCHAIN=local GOPRIVATE=github.com/DouDOU-start/airgate-sdk GONOPROXY=github.com/DouDOU-start/airgate-sdk GONOSUMDB=github.com/DouDOU-start/airgate-sdk go
 
 # 版本号：默认从 git 派生（dirty 检测），release workflow 通过 -ldflags 注入。
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -45,10 +45,18 @@ help: ## 显示帮助信息
 dev: ## 同时启动插件 watch + 前后端开发服务器
 	@echo "启动开发环境..."
 	@$(MAKE) sync-plugins
-	@$(MAKE) dev-plugins &
-	@$(MAKE) dev-backend &
-	@$(MAKE) dev-frontend
-	@wait
+	@cleanup() { \
+		pids="$$(jobs -pr)"; \
+		if [ -n "$$pids" ]; then \
+			echo "停止开发子进程..."; \
+			kill $$pids 2>/dev/null || true; \
+		fi; \
+		wait 2>/dev/null || true; \
+	}; \
+	trap cleanup INT TERM EXIT; \
+	$(MAKE) dev-plugins & \
+	$(MAKE) dev-backend & \
+	$(MAKE) dev-frontend
 
 dev-plugins: ## 启动所有插件前端 watch 模式
 	@echo "启动插件前端 watch（统一输出到 <plugin>/web/dist，core 在 dev 模式下直读）："
@@ -59,14 +67,22 @@ dev-plugins: ## 启动所有插件前端 watch 模式
 	@echo "  - health      → ../airgate-health/web/dist/  （含 admin index.js + standalone status page）"
 	@echo "  - kiro        → ../airgate-kiro/web/dist/"
 	@echo "  - studio      → ../airgate-studio/web/dist/"
-	@$(MAKE) dev-plugin-openai &
-	@$(MAKE) dev-plugin-claude &
-	@$(MAKE) dev-plugin-playground &
-	@$(MAKE) dev-plugin-epay &
-	@$(MAKE) dev-plugin-health &
-	@$(MAKE) dev-plugin-kiro &
-	@$(MAKE) dev-plugin-studio &
-	@wait
+	@cleanup() { \
+		pids="$$(jobs -pr)"; \
+		if [ -n "$$pids" ]; then \
+			kill $$pids 2>/dev/null || true; \
+		fi; \
+		wait 2>/dev/null || true; \
+	}; \
+	trap cleanup INT TERM EXIT; \
+	$(MAKE) dev-plugin-openai & \
+	$(MAKE) dev-plugin-claude & \
+	$(MAKE) dev-plugin-playground & \
+	$(MAKE) dev-plugin-epay & \
+	$(MAKE) dev-plugin-health & \
+	$(MAKE) dev-plugin-kiro & \
+	$(MAKE) dev-plugin-studio & \
+	wait
 
 dev-plugin-openai: ## 单独 watch openai 插件前端（输出到 ../airgate-openai/web/dist）
 	@if [ -d $(OPENAI_PLUGIN) ]; then \

@@ -119,7 +119,7 @@ func (s *Service) refreshAllOAuthQuotas(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if item.Type == "apikey" || len(item.Credentials) == 0 {
+		if !shouldAutoRefreshQuota(item) {
 			skipped++
 			continue
 		}
@@ -135,6 +135,18 @@ func (s *Service) refreshAllOAuthQuotas(ctx context.Context) {
 	}
 
 	logger.Info("account_quota_auto_refresh_complete", "success", success, "failed", failed, "skipped", skipped)
+}
+
+func shouldAutoRefreshQuota(item Account) bool {
+	if len(item.Credentials) == 0 {
+		return false
+	}
+	accountType := strings.ToLower(strings.TrimSpace(item.Type))
+	if accountType == "apikey" || accountType == "api_key" {
+		return false
+	}
+	return strings.TrimSpace(item.Credentials["access_token"]) != "" ||
+		strings.TrimSpace(item.Credentials["refresh_token"]) != ""
 }
 
 // List 查询账号列表。
