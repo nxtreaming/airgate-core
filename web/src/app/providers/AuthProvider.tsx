@@ -30,10 +30,11 @@ const AuthContext = createContext<AuthContextType>({
 function normalizeSessionUser(user: UserResp, token = getToken()): UserResp {
   const role = getTokenRole(token);
   const apiKeyID = getTokenAPIKeyID(token);
+  const effectiveRole = apiKeyID ? 'user' : (role ?? user.role);
 
   return {
     ...user,
-    role: role ?? user.role,
+    role: effectiveRole,
     ...(apiKeyID ? { api_key_id: apiKeyID } : {}),
   };
 }

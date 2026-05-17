@@ -29,7 +29,7 @@ export function ChatShell({ children }: ChatShellProps) {
   const { t, i18n } = useTranslation();
   const { theme, toggleTheme } = useTheme();
   const site = useSiteSettings();
-  const isAdmin = getTokenRole() === 'admin' || user?.role === 'admin';
+  const isAdmin = !isAPIKeySession && (getTokenRole() === 'admin' || user?.role === 'admin');
 
   useEffect(() => {
     document.title = site.site_name || 'AirGate';

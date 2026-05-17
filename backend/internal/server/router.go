@@ -63,39 +63,41 @@ func (s *Server) registerRoutes() {
 	userGroup := v1.Group("")
 	userGroup.Use(middleware.JWTAuth(s.jwtMgr))
 	{
+		fullSessionOnly := middleware.RejectAPIKeySession()
+
 		// 用户资料
 		userGroup.GET("/users/me", handlers.User.GetMe)
-		userGroup.PUT("/users/me", handlers.User.UpdateProfile)
-		userGroup.POST("/users/me/password", handlers.User.ChangePassword)
-		userGroup.PUT("/users/me/balance-alert", handlers.User.UpdateBalanceAlert)
-		userGroup.GET("/users/me/balance-history", handlers.User.GetMyBalanceHistory)
+		userGroup.PUT("/users/me", fullSessionOnly, handlers.User.UpdateProfile)
+		userGroup.POST("/users/me/password", fullSessionOnly, handlers.User.ChangePassword)
+		userGroup.PUT("/users/me/balance-alert", fullSessionOnly, handlers.User.UpdateBalanceAlert)
+		userGroup.GET("/users/me/balance-history", fullSessionOnly, handlers.User.GetMyBalanceHistory)
 
 		// API Key 管理
-		userGroup.GET("/api-keys", handlers.APIKey.ListKeys)
-		userGroup.POST("/api-keys", handlers.APIKey.CreateKey)
-		userGroup.PUT("/api-keys/:id", handlers.APIKey.UpdateKey)
-		userGroup.DELETE("/api-keys/:id", handlers.APIKey.DeleteKey)
-		userGroup.GET("/api-keys/:id/reveal", handlers.APIKey.RevealKey)
+		userGroup.GET("/api-keys", fullSessionOnly, handlers.APIKey.ListKeys)
+		userGroup.POST("/api-keys", fullSessionOnly, handlers.APIKey.CreateKey)
+		userGroup.PUT("/api-keys/:id", fullSessionOnly, handlers.APIKey.UpdateKey)
+		userGroup.DELETE("/api-keys/:id", fullSessionOnly, handlers.APIKey.DeleteKey)
+		userGroup.GET("/api-keys/:id/reveal", fullSessionOnly, handlers.APIKey.RevealKey)
 
 		// 分组
-		userGroup.GET("/groups", handlers.Group.ListAvailableGroups)
+		userGroup.GET("/groups", fullSessionOnly, handlers.Group.ListAvailableGroups)
 
 		// 订阅
-		userGroup.GET("/subscriptions", handlers.Subscription.UserSubscriptions)
-		userGroup.GET("/subscriptions/active", handlers.Subscription.ActiveSubscriptions)
-		userGroup.GET("/subscriptions/progress", handlers.Subscription.SubscriptionProgress)
+		userGroup.GET("/subscriptions", fullSessionOnly, handlers.Subscription.UserSubscriptions)
+		userGroup.GET("/subscriptions/active", fullSessionOnly, handlers.Subscription.ActiveSubscriptions)
+		userGroup.GET("/subscriptions/progress", fullSessionOnly, handlers.Subscription.SubscriptionProgress)
 
 		// 使用记录
 		userGroup.GET("/usage", handlers.Usage.UserUsage)
 		userGroup.GET("/usage/stats", handlers.Usage.UserUsageStats)
 		userGroup.GET("/usage/trend", handlers.Usage.UserUsageTrend)
 
-		// 插件菜单（精简元信息：仅返回 name + frontend_pages，所有登录用户可访问，
+		// 插件菜单（精简元信息：仅返回 name + frontend_pages，普通账号会话可访问，
 		// 用于前端 AppShell 渲染插件提供的页面菜单项）
-		userGroup.GET("/plugins/menu", handlers.Plugin.ListPluginMenu)
+		userGroup.GET("/plugins/menu", fullSessionOnly, handlers.Plugin.ListPluginMenu)
 	}
 
-	// === 管理员路由（需要 JWT + AdminOnly，支持管理员 API Key） ===
+	// === 管理员路由（需要管理员 JWT + AdminOnly，支持 admin- 管理员 API Key） ===
 	adminGroup := v1.Group("/admin")
 	adminGroup.Use(middleware.JWTAuth(s.jwtMgr, s.db), middleware.AdminOnly())
 	{
@@ -200,7 +202,7 @@ func (s *Server) registerRoutes() {
 		adminGroup.POST("/upgrade/run", handlers.Upgrade.Run)
 	}
 
-	// === Extension 插件 API 路由（JWT 认证 + 管理员权限，支持管理员 API Key） ===
+	// === Extension 插件 API 路由（JWT 认证 + 管理员权限，支持 admin- 管理员 API Key） ===
 	extGroup := r.Group("/api/v1/ext")
 	extGroup.Use(middleware.JWTAuth(s.jwtMgr, s.db), middleware.AdminOnly())
 	{
@@ -211,7 +213,7 @@ func (s *Server) registerRoutes() {
 	// 用于支付插件等面向用户的扩展，让普通用户能调用插件接口（创建充值订单、查询自己订单等）。
 	// 插件需自行根据 X-Airgate-User-ID 头识别用户，并校验数据归属。
 	extUserGroup := r.Group("/api/v1/ext-user")
-	extUserGroup.Use(middleware.JWTAuth(s.jwtMgr, s.db))
+	extUserGroup.Use(middleware.JWTAuth(s.jwtMgr), middleware.RejectAPIKeySession())
 	{
 		extUserGroup.Any("/:pluginName/*path", s.extensionProxy.Handle)
 	}

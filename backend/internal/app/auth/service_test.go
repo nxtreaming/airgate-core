@@ -148,7 +148,7 @@ func TestRefreshTokenPreservesAPIKeyIdentity(t *testing.T) {
 
 	token, err := service.RefreshToken(AuthIdentity{
 		UserID:   5,
-		Role:     "user",
+		Role:     "admin",
 		Email:    "u@test.com",
 		APIKeyID: 13,
 	})
@@ -159,7 +159,7 @@ func TestRefreshTokenPreservesAPIKeyIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("解析刷新 token 失败: %v", err)
 	}
-	if claims.UserID != 5 || claims.APIKeyID != 13 {
+	if claims.UserID != 5 || claims.APIKeyID != 13 || claims.Role != corauth.APIKeySessionRole {
 		t.Fatalf("刷新 claims 异常: %+v", claims)
 	}
 }

@@ -68,6 +68,22 @@ func TestJWTGenerateParseAndRefresh(t *testing.T) {
 	}
 }
 
+func TestAPIKeyTokenAlwaysUsesScopedUserRole(t *testing.T) {
+	mgr := NewJWTManager("jwt-secret", 1)
+	token, err := mgr.GenerateAPIKeyToken(7, "admin", "admin@example.com", 11)
+	if err != nil {
+		t.Fatalf("签发 token 失败: %v", err)
+	}
+
+	claims, err := mgr.ParseToken(token)
+	if err != nil {
+		t.Fatalf("解析 token 失败: %v", err)
+	}
+	if claims.Role != APIKeySessionRole {
+		t.Fatalf("API Key 登录 role = %q，期望 %q", claims.Role, APIKeySessionRole)
+	}
+}
+
 func TestJWTRejectsInvalidAndExpiredToken(t *testing.T) {
 	mgr := NewJWTManager("jwt-secret", 1)
 	if _, err := mgr.ParseToken("invalid"); !errors.Is(err, ErrInvalidToken) {

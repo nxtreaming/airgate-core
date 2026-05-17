@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	appdashboard "github.com/DouDOU-start/airgate-core/internal/app/dashboard"
+	"github.com/DouDOU-start/airgate-core/internal/server/middleware"
 )
 
 // DashboardHandler 仪表盘 Handler。
@@ -19,6 +20,9 @@ func NewDashboardHandler(service *appdashboard.Service) *DashboardHandler {
 }
 
 func ensureAdminRole(c *gin.Context) bool {
+	if middleware.APIKeySessionID(c) > 0 {
+		return false
+	}
 	role, _ := c.Get("role")
 	return role == "admin"
 }

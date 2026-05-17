@@ -84,6 +84,43 @@ func TestAdminOnlyRejectsMissingOrNonAdminRole(t *testing.T) {
 	}
 }
 
+func TestAdminOnlyRejectsAPIKeyScopedAdminRole(t *testing.T) {
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(CtxKeyRole, "admin")
+		c.Set(CtxKeyAPIKeyID, 17)
+	})
+	router.Use(AdminOnly())
+	router.GET("/admin", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin", nil))
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("状态码 = %d，期望 %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestRejectAPIKeySession(t *testing.T) {
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(CtxKeyAPIKeyID, 17)
+	})
+	router.Use(RejectAPIKeySession())
+	router.GET("/account", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/account", nil))
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("状态码 = %d，期望 %d", w.Code, http.StatusForbidden)
+	}
+}
+
 func TestAdminOnlyAllowsAdminRole(t *testing.T) {
 	router := gin.New()
 	router.Use(func(c *gin.Context) {

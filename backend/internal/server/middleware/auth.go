@@ -26,7 +26,7 @@ const (
 
 // JWTAuth JWT 认证中间件
 // 从 Authorization: Bearer <token> 头解析 JWT，将 user_id、role 设置到 Context。
-// 同时支持管理员 API Key（admin-xxx 格式）作为备选认证方式。
+// 管理员路由可传入 db，以额外支持 admin-xxx 管理员 API Key 作为替代凭证。
 func JWTAuth(jwtMgr *auth.JWTManager, db ...*ent.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := extractBearerToken(c)
@@ -37,7 +37,7 @@ func JWTAuth(jwtMgr *auth.JWTManager, db ...*ent.Client) gin.HandlerFunc {
 			return
 		}
 
-		// 管理员 API Key 认证
+		// 显式管理员 API Key 认证。仅调用方传入 db 的路由启用，避免 admin-xxx 在普通用户路由中生效。
 		if auth.IsAdminAPIKey(tokenStr) && len(db) > 0 && db[0] != nil {
 			if err := auth.ValidateAdminAPIKey(c.Request.Context(), db[0], tokenStr); err != nil {
 				slog.Warn("admin_api_key_validation_failed", sdk.LogFieldReason, "invalid_admin_key", sdk.LogFieldError, err, sdk.LogFieldRequestID, RequestIDFromGinContext(c))
@@ -48,7 +48,7 @@ func JWTAuth(jwtMgr *auth.JWTManager, db ...*ent.Client) gin.HandlerFunc {
 			c.Set(CtxKeyUserID, 0)
 			c.Set(CtxKeyRole, "admin")
 			c.Set(CtxKeyEmail, "")
-			// 派生带 user_id/role 的 logger 写回 ctx，便于后续 handler 复用
+
 			ctx := c.Request.Context()
 			logger := sdk.LoggerFromContext(ctx).With(sdk.LogFieldUserID, 0, "role", "admin")
 			c.Request = c.Request.WithContext(sdk.WithLogger(ctx, logger))
@@ -159,6 +159,13 @@ func abortWithOpenAIError(c *gin.Context, status int, code, message string) {
 // AdminOnly 管理员权限中间件（需要在 JWTAuth 之后使用）
 func AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if id := APIKeySessionID(c); id > 0 {
+			slog.Warn("admin_access_denied", sdk.LogFieldReason, "scoped_api_key_session", sdk.LogFieldAPIKeyID, id, sdk.LogFieldRequestID, RequestIDFromGinContext(c))
+			response.Forbidden(c, "API Key 登录会话不能访问管理员接口")
+			c.Abort()
+			return
+		}
+
 		role, exists := c.Get(CtxKeyRole)
 		if !exists || role.(string) != "admin" {
 			slog.Warn("admin_access_denied", sdk.LogFieldReason, "non_admin_role", sdk.LogFieldRequestID, RequestIDFromGinContext(c))
@@ -168,6 +175,29 @@ func AdminOnly() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// RejectAPIKeySession 禁止 API Key 登录拿到的 scoped JWT 访问普通账号会话接口。
+func RejectAPIKeySession() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if id := APIKeySessionID(c); id > 0 {
+			slog.Warn("api_key_session_access_denied", sdk.LogFieldAPIKeyID, id, sdk.LogFieldRequestID, RequestIDFromGinContext(c))
+			response.Forbidden(c, "API Key 登录会话只能查看该 Key 的使用记录")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// APIKeySessionID 返回 JWT 中携带的 API Key ID，0 表示普通账号会话。
+func APIKeySessionID(c *gin.Context) int {
+	if apiKeyID, exists := c.Get(CtxKeyAPIKeyID); exists {
+		if id, ok := apiKeyID.(int); ok && id > 0 {
+			return id
+		}
+	}
+	return 0
 }
 
 // extractBearerToken 从 Authorization 头或 x-api-key 头提取 API Key
