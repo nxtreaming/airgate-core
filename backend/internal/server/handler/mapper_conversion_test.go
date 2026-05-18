@@ -89,8 +89,8 @@ func TestSubscriptionMappersCloneUsageAndWindows(t *testing.T) {
 }
 
 func TestDashboardAndUsageMappers(t *testing.T) {
-	stats := toDashboardStatsResp(appdashboard.Stats{TotalAPIKeys: 2, TodayRequests: 7, RPM: 3})
-	if stats.TotalAPIKeys != 2 || stats.TodayRequests != 7 || stats.RPM != 3 {
+	stats := toDashboardStatsResp(appdashboard.Stats{TotalAPIKeys: 2, TodayRequests: 7, TodayImageRequests: 3, RPM: 3, AvgFirstTokenMs: 120, AvgImageDurationMs: 120000})
+	if stats.TotalAPIKeys != 2 || stats.TodayRequests != 7 || stats.TodayImageRequests != 3 || stats.RPM != 3 || stats.AvgFirstTokenMs != 120 || stats.AvgImageDurationMs != 120000 {
 		t.Fatalf("仪表盘统计响应异常: %+v", stats)
 	}
 

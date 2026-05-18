@@ -250,10 +250,22 @@ export function useAccountTableColumns({
           );
         }
 
-        type UsageWindowRow = { id: string; window?: AccountUsageWindow };
-        const windows: AccountUsageWindow[] = usage.windows || [];
+        type UsageWindowRow = { id: string; window: AccountUsageWindow };
+        const windows: AccountUsageWindow[] = Array.isArray(usage.windows) ? usage.windows : [];
         const credits: AccountUsageCredits | null = usage.credits || null;
-        const todayStats: AccountUsageTodayStats | null = usage.today_stats || null;
+        const todayStatsRaw = usage.today_stats || null;
+        const toFiniteNumber = (value: unknown) => {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+        const todayStats: AccountUsageTodayStats | null = todayStatsRaw
+          ? {
+              requests: toFiniteNumber(todayStatsRaw.requests),
+              tokens: toFiniteNumber(todayStatsRaw.tokens),
+              account_cost: toFiniteNumber(todayStatsRaw.account_cost),
+              user_cost: toFiniteNumber(todayStatsRaw.user_cost),
+            }
+          : null;
 
         const formatCompact = (num: number, allowBillions = true) => {
           if (!num) return '0';
@@ -298,7 +310,10 @@ export function useAccountTableColumns({
           const d = Math.floor(seconds / 86400);
           const h = Math.floor((seconds % 86400) / 3600);
           const m = Math.floor((seconds % 3600) / 60);
-          if (d > 0) return h > 0 ? `${d}d${h}h` : `${d}d`;
+          if (d > 0) {
+            if (h > 0 || m === 0) return `${d}d${h}h`;
+            return `${d}d${m}m`;
+          }
           if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`;
           return `${m}m`;
         };
@@ -323,6 +338,34 @@ export function useAccountTableColumns({
             || (key.startsWith('model:') ? key.replace(/^model:(5h|7d):/, 'model:') : 'base');
           return { group, slot };
         };
+        const getWindowGroupLabel = (group: string, slot: string, label: string) => {
+          const labelParts = label.trim().split(/\s+/);
+          if (labelParts.length > 1 && normalizeWindowToken(labelParts[0]) === slot) {
+            return labelParts.slice(1).join(' ');
+          }
+          const rawGroup = group.replace(/^model:/, '').trim();
+          if (!rawGroup || rawGroup === 'base') return '';
+          const parts = rawGroup.split(/[-\s:]+/).filter(Boolean);
+          return parts[parts.length - 1] ?? rawGroup;
+        };
+        const getWindowDisplay = (w: AccountUsageWindow) => {
+          const { group, slot } = getWindowSlot(w);
+          const explicitLabel = w.display_label?.trim();
+          const fallbackLabel = explicitLabel || slot || w.label;
+          if (group !== 'base' && slot) {
+            const groupLabel = getWindowGroupLabel(group, slot, w.label || '');
+            if (groupLabel && (!explicitLabel || normalizeWindowToken(explicitLabel) === slot)) {
+              return {
+                label: `${slot}${groupLabel.charAt(0).toUpperCase()}`,
+                title: `${slot} ${groupLabel}`,
+              };
+            }
+          }
+          return {
+            label: fallbackLabel,
+            title: w.label || fallbackLabel,
+          };
+        };
         const buildWindowRows = (items: AccountUsageWindow[]): UsageWindowRow[] => {
           const groups: Array<{ id: string; five?: AccountUsageWindow; seven?: AccountUsageWindow; other: AccountUsageWindow[] }> = [];
           const groupMap = new Map<string, { id: string; five?: AccountUsageWindow; seven?: AccountUsageWindow; other: AccountUsageWindow[] }>();
@@ -342,17 +385,11 @@ export function useAccountTableColumns({
 
           return groups.flatMap((group) => {
             const rows: UsageWindowRow[] = [];
-            if (group.five || group.seven) {
-              if (group.five) {
-                rows.push({ id: `${group.id}:5h`, window: group.five });
-              } else {
-                rows.push({ id: `${group.id}:5h-placeholder` });
-              }
-              if (group.seven) {
-                rows.push({ id: `${group.id}:7d`, window: group.seven });
-              } else {
-                rows.push({ id: `${group.id}:7d-placeholder` });
-              }
+            if (group.five) {
+              rows.push({ id: `${group.id}:5h`, window: group.five });
+            }
+            if (group.seven) {
+              rows.push({ id: `${group.id}:7d`, window: group.seven });
             }
             for (const window of group.other) {
               const { slot } = getWindowSlot(window);
@@ -362,6 +399,9 @@ export function useAccountTableColumns({
           });
         };
         const windowRows = buildWindowRows(windows);
+        const windowsClassName = windowRows.length > 2
+          ? 'ag-account-usage-windows ag-account-usage-windows--expanded'
+          : 'ag-account-usage-windows';
 
         const badgeStyle = { background: 'var(--ag-bg-surface)', border: '1px solid var(--ag-glass-border)' };
         const todayImageCount = row.platform === 'openai' ? (row.today_image_count ?? 0) : 0;
@@ -451,22 +491,18 @@ export function useAccountTableColumns({
             onClick={canRefresh ? handleRefreshClick : undefined}
           >
             <div className={todayMetricChips ? 'ag-account-usage-layout' : 'ag-account-usage-layout ag-account-usage-layout--centered'}>
-              <div className="ag-account-usage-windows">
+              <div className={windowsClassName}>
                 {windowRows.map((item) => {
                   const w = item.window;
-                  if (!w) {
-                    return <div key={item.id} className="h-5" aria-hidden="true" />;
-                  }
                   const percent = Math.round(w.used_percent);
                   const barPercent = Math.max(0, Math.min(100, percent));
                   const color = usageColor(w.used_percent);
                   const resetText = formatReset(getResetSeconds(w));
-                  const { slot } = getWindowSlot(w);
-                  const displayLabel = w.display_label?.trim() || slot;
+                  const display = getWindowDisplay(w);
                   return (
                     <div key={item.id} className="ag-account-usage-window-row">
-                      <span className="ag-account-usage-window-label text-text-secondary" style={badgeStyle} title={w.label}>
-                        {displayLabel}
+                      <span className="ag-account-usage-window-label text-text-secondary" style={badgeStyle} title={display.title}>
+                        {display.label}
                       </span>
                       <div className="ag-account-usage-bar" style={{ background: 'var(--ag-glass-border)' }}>
                         <div

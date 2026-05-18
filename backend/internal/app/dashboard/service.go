@@ -49,6 +49,7 @@ func (s *Service) Stats(ctx context.Context, userID int, tz string) (Stats, erro
 		EnabledAccounts:     snapshot.EnabledAccounts,
 		ErrorAccounts:       snapshot.ErrorAccounts,
 		TodayRequests:       snapshot.TodayRequests,
+		TodayImageRequests:  snapshot.TodayImageRequests,
 		AllTimeRequests:     snapshot.AllTimeRequests,
 		TotalUsers:          snapshot.TotalUsers,
 		NewUsersToday:       snapshot.NewUsersToday,
@@ -62,8 +63,14 @@ func (s *Service) Stats(ctx context.Context, userID int, tz string) (Stats, erro
 		RPM:                 float64(snapshot.RecentRequests) / 5.0,
 		TPM:                 float64(snapshot.RecentTokens) / 5.0,
 	}
-	if snapshot.TodayRequests > 0 {
-		result.AvgDurationMs = float64(snapshot.TodayDurationMs) / float64(snapshot.TodayRequests)
+	if snapshot.TodayNonImageRequests > 0 {
+		result.AvgDurationMs = float64(snapshot.TodayNonImageDurationMs) / float64(snapshot.TodayNonImageRequests)
+	}
+	if snapshot.TodayFirstTokenRequests > 0 {
+		result.AvgFirstTokenMs = float64(snapshot.TodayFirstTokenMs) / float64(snapshot.TodayFirstTokenRequests)
+	}
+	if snapshot.TodayImageRequests > 0 {
+		result.AvgImageDurationMs = float64(snapshot.TodayImageDurationMs) / float64(snapshot.TodayImageRequests)
 	}
 
 	return result, nil

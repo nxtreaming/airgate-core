@@ -128,6 +128,7 @@ func (s *Server) registerRoutes() {
 		adminGroup.PATCH("/accounts/:id/toggle", handlers.Account.ToggleScheduling)
 		adminGroup.DELETE("/accounts/:id/family-cooldowns", handlers.Account.ClearFamilyCooldowns)
 		adminGroup.GET("/accounts/:id/models", handlers.Account.GetAccountModels)
+		adminGroup.GET("/accounts/:id/usage", handlers.Account.GetSingleAccountUsage)
 		adminGroup.GET("/accounts/credentials-schema/:platform", handlers.Account.GetCredentialsSchema)
 		adminGroup.POST("/accounts/:id/refresh-quota", handlers.Account.RefreshQuota)
 		adminGroup.GET("/accounts/:id/stats", handlers.Account.GetAccountStats)

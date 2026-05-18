@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/DouDOU-start/airgate-core/ent"
@@ -85,14 +86,30 @@ func (s *DashboardStore) LoadStatsSnapshot(ctx context.Context, todayStart, five
 	var todayTokens int64
 	var todayCost float64
 	var todayStandardCost float64
-	var todayDurationMs int64
+	var todayImageRequests int64
+	var todayNonImageRequests int64
+	var todayNonImageDurationMs int64
+	var todayFirstTokenRequests int64
+	var todayFirstTokenMs int64
+	var todayImageDurationMs int64
 	activeUserSet := make(map[int]bool)
 	for _, item := range todayLogs {
+		isImage := isDashboardImageModel(item.Model)
 		todayRequests++
 		todayTokens += int64(item.InputTokens + item.OutputTokens + item.CachedInputTokens + item.CacheCreationTokens)
 		todayCost += item.ActualCost
 		todayStandardCost += item.TotalCost
-		todayDurationMs += item.DurationMs
+		if isImage {
+			todayImageRequests++
+			todayImageDurationMs += item.DurationMs
+		} else {
+			todayNonImageRequests++
+			todayNonImageDurationMs += item.DurationMs
+			if item.FirstTokenMs > 0 {
+				todayFirstTokenRequests++
+				todayFirstTokenMs += item.FirstTokenMs
+			}
+		}
 		if edgeUser := item.Edges.User; edgeUser != nil {
 			activeUserSet[edgeUser.ID] = true
 		}
@@ -114,25 +131,30 @@ func (s *DashboardStore) LoadStatsSnapshot(ctx context.Context, todayStart, five
 	}
 
 	return appdashboard.StatsSnapshot{
-		TotalAPIKeys:        int64(totalAPIKeys),
-		EnabledAPIKeys:      int64(enabledAPIKeys),
-		TotalAccounts:       int64(totalAccounts),
-		EnabledAccounts:     int64(enabledAccounts),
-		ErrorAccounts:       int64(errorAccounts),
-		TotalUsers:          int64(totalUsers),
-		NewUsersToday:       int64(newUsersToday),
-		TodayRequests:       todayRequests,
-		AllTimeRequests:     int64(allTimeRequests),
-		TodayTokens:         todayTokens,
-		TodayCost:           todayCost,
-		TodayStandardCost:   todayStandardCost,
-		TodayDurationMs:     todayDurationMs,
-		ActiveUsers:         int64(len(activeUserSet)),
-		AllTimeTokens:       allTimeTokens,
-		AllTimeCost:         allTimeCost,
-		AllTimeStandardCost: allTimeStandardCost,
-		RecentRequests:      int64(recentRequests),
-		RecentTokens:        recentTokens,
+		TotalAPIKeys:            int64(totalAPIKeys),
+		EnabledAPIKeys:          int64(enabledAPIKeys),
+		TotalAccounts:           int64(totalAccounts),
+		EnabledAccounts:         int64(enabledAccounts),
+		ErrorAccounts:           int64(errorAccounts),
+		TotalUsers:              int64(totalUsers),
+		NewUsersToday:           int64(newUsersToday),
+		TodayRequests:           todayRequests,
+		TodayImageRequests:      todayImageRequests,
+		TodayNonImageRequests:   todayNonImageRequests,
+		AllTimeRequests:         int64(allTimeRequests),
+		TodayTokens:             todayTokens,
+		TodayCost:               todayCost,
+		TodayStandardCost:       todayStandardCost,
+		TodayNonImageDurationMs: todayNonImageDurationMs,
+		TodayFirstTokenRequests: todayFirstTokenRequests,
+		TodayFirstTokenMs:       todayFirstTokenMs,
+		TodayImageDurationMs:    todayImageDurationMs,
+		ActiveUsers:             int64(len(activeUserSet)),
+		AllTimeTokens:           allTimeTokens,
+		AllTimeCost:             allTimeCost,
+		AllTimeStandardCost:     allTimeStandardCost,
+		RecentRequests:          int64(recentRequests),
+		RecentTokens:            recentTokens,
 	}, nil
 }
 
@@ -199,4 +221,8 @@ func queryUsageTotals(ctx context.Context, query *ent.UsageLogQuery) (int64, flo
 		return 0, 0, 0, nil
 	}
 	return rows[0].InputSum + rows[0].OutputSum + rows[0].CacheSum + rows[0].CacheCreationSum, rows[0].CostSum, rows[0].StandardCostSum, nil
+}
+
+func isDashboardImageModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-image")
 }

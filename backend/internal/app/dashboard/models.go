@@ -13,25 +13,30 @@ type Repository interface {
 
 // StatsSnapshot 表示从存储层读取的原始统计快照。
 type StatsSnapshot struct {
-	TotalAPIKeys        int64
-	EnabledAPIKeys      int64
-	TotalAccounts       int64
-	EnabledAccounts     int64
-	ErrorAccounts       int64
-	TotalUsers          int64
-	NewUsersToday       int64
-	TodayRequests       int64
-	AllTimeRequests     int64
-	TodayTokens         int64
-	TodayCost           float64
-	TodayStandardCost   float64
-	TodayDurationMs     int64
-	ActiveUsers         int64
-	AllTimeTokens       int64
-	AllTimeCost         float64
-	AllTimeStandardCost float64
-	RecentRequests      int64
-	RecentTokens        int64
+	TotalAPIKeys            int64
+	EnabledAPIKeys          int64
+	TotalAccounts           int64
+	EnabledAccounts         int64
+	ErrorAccounts           int64
+	TotalUsers              int64
+	NewUsersToday           int64
+	TodayRequests           int64
+	TodayImageRequests      int64
+	TodayNonImageRequests   int64
+	AllTimeRequests         int64
+	TodayTokens             int64
+	TodayCost               float64
+	TodayStandardCost       float64
+	TodayNonImageDurationMs int64
+	TodayFirstTokenRequests int64
+	TodayFirstTokenMs       int64
+	TodayImageDurationMs    int64
+	ActiveUsers             int64
+	AllTimeTokens           int64
+	AllTimeCost             float64
+	AllTimeStandardCost     float64
+	RecentRequests          int64
+	RecentTokens            int64
 }
 
 // Stats 表示仪表盘统计结果。
@@ -42,6 +47,7 @@ type Stats struct {
 	EnabledAccounts     int64
 	ErrorAccounts       int64
 	TodayRequests       int64
+	TodayImageRequests  int64
 	AllTimeRequests     int64
 	TotalUsers          int64
 	NewUsersToday       int64
@@ -53,7 +59,9 @@ type Stats struct {
 	AllTimeStandardCost float64
 	RPM                 float64
 	TPM                 float64
+	AvgFirstTokenMs     float64
 	AvgDurationMs       float64
+	AvgImageDurationMs  float64
 	ActiveUsers         int64
 }
 

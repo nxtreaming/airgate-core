@@ -768,6 +768,7 @@ export interface DashboardStatsResp {
   enabled_accounts: number;
   error_accounts: number;
   today_requests: number;
+  today_image_requests: number;
   alltime_requests: number;
   total_users: number;
   new_users_today: number;
@@ -779,7 +780,9 @@ export interface DashboardStatsResp {
   alltime_standard_cost: number;
   rpm: number;
   tpm: number;
+  avg_first_token_ms: number;
   avg_duration_ms: number;
+  avg_image_duration_ms: number;
   active_users: number;
 }
 

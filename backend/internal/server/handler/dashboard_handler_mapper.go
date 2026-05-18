@@ -13,6 +13,7 @@ func toDashboardStatsResp(item appdashboard.Stats) dto.DashboardStatsResp {
 		EnabledAccounts:     item.EnabledAccounts,
 		ErrorAccounts:       item.ErrorAccounts,
 		TodayRequests:       item.TodayRequests,
+		TodayImageRequests:  item.TodayImageRequests,
 		AllTimeRequests:     item.AllTimeRequests,
 		TotalUsers:          item.TotalUsers,
 		NewUsersToday:       item.NewUsersToday,
@@ -24,7 +25,9 @@ func toDashboardStatsResp(item appdashboard.Stats) dto.DashboardStatsResp {
 		AllTimeStandardCost: item.AllTimeStandardCost,
 		RPM:                 item.RPM,
 		TPM:                 item.TPM,
+		AvgFirstTokenMs:     item.AvgFirstTokenMs,
 		AvgDurationMs:       item.AvgDurationMs,
+		AvgImageDurationMs:  item.AvgImageDurationMs,
 		ActiveUsers:         item.ActiveUsers,
 	}
 }

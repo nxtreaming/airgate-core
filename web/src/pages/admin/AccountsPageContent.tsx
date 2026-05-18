@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertDialog, Button, Dropdown, EmptyState, Input, Label, ListBox, Select, Spinner, TextField as HeroTextField } from '@heroui/react';
 import {
   Plus,
@@ -60,6 +60,8 @@ import {
   runAfterInputFrame,
   useLatestRef,
   type AccountTypeFilterOption,
+  type AccountUsageData,
+  type AccountUsageInfo,
   type AccountUsageWindowCache,
 } from './accounts/AccountPageSupport';
 
@@ -188,6 +190,7 @@ export default function AccountsPageContent() {
       }),
     placeholderData: keepPreviousData,
   });
+  const rows = data?.list ?? [];
 
   // 查询分组列表（用于表格中 ID→名称映射）
   const { data: allGroupsData } = useQuery({
@@ -212,11 +215,68 @@ export default function AccountsPageContent() {
     queryKey: queryKeys.accountUsage(platformFilter),
     queryFn: () => accountsApi.usage(platformFilter || ''),
     meta: { globalLoading: false },
-    refetchInterval: 300_000, // 每 5 分钟刷新
+    refetchInterval: 300_000,
+    refetchIntervalInBackground: false,
   });
+  const singleUsageResults = useQueries({
+    queries: rows.map((row) => ({
+      queryKey: queryKeys.accountUsage(platformFilter, 'account', row.id),
+      queryFn: ({ signal }: { signal?: AbortSignal }) =>
+        accountsApi.usageOne(row.id, { signal }) as Promise<AccountUsageInfo>,
+      enabled: row.type !== 'apikey',
+      meta: { globalLoading: false },
+      staleTime: 300_000,
+      gcTime: 10 * 60_000,
+      refetchOnWindowFocus: false,
+    })),
+    combine: (results) => results.map((query) => ({
+      data: query.data as AccountUsageInfo | undefined,
+    })),
+  });
+  const rawUsageWithSingleAccounts = useMemo<AccountUsageData | undefined>(() => {
+    const accounts: Record<string, AccountUsageInfo> = { ...(rawUsageData?.accounts ?? {}) };
+    let hasSingleAccount = false;
+    const hasUpstreamUsage = (usage: AccountUsageInfo | undefined) =>
+      Boolean((Array.isArray(usage?.windows) && usage.windows.length > 0) || usage?.credits);
+    const updatedAtMs = (usage: AccountUsageInfo | undefined) => {
+      if (!usage?.updated_at) return 0;
+      const parsed = Date.parse(usage.updated_at);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    rows.forEach((row, index) => {
+      const singleUsage = singleUsageResults[index]?.data;
+      if (!singleUsage) return;
+      const accountKey = String(row.id);
+      const existingUsage = accounts[accountKey];
+      const singleHasUpstream = hasUpstreamUsage(singleUsage);
+
+      if (!existingUsage) {
+        accounts[accountKey] = singleUsage;
+      } else if (!singleHasUpstream) {
+        accounts[accountKey] = {
+          ...existingUsage,
+          today_stats: singleUsage.today_stats ?? existingUsage.today_stats,
+        };
+      } else if (!hasUpstreamUsage(existingUsage) || updatedAtMs(singleUsage) >= updatedAtMs(existingUsage)) {
+        accounts[accountKey] = {
+          ...existingUsage,
+          ...singleUsage,
+          today_stats: singleUsage.today_stats ?? existingUsage.today_stats,
+        };
+      }
+      hasSingleAccount = true;
+    });
+
+    if (!rawUsageData && !hasSingleAccount) return undefined;
+    return {
+      ...rawUsageData,
+      accounts,
+    };
+  }, [rawUsageData, rows, singleUsageResults]);
   const usageData = useMemo(
-    () => mergeCachedUsageWindows(rawUsageData, usageWindowCacheRef.current),
-    [rawUsageData],
+    () => mergeCachedUsageWindows(rawUsageWithSingleAccounts, usageWindowCacheRef.current),
+    [rawUsageWithSingleAccounts],
   );
   const usageDataRef = useRef(usageData);
   usageDataRef.current = usageData;
@@ -518,7 +578,6 @@ export default function AccountsPageContent() {
     platformsKey,
     usageData,
   });
-  const rows = data?.list ?? [];
   const total = data?.total ?? 0;
   const totalPages = getTotalPages(total, pageSize);
   const visibleRowIds = useMemo(() => rows.map((row) => row.id), [rows]);

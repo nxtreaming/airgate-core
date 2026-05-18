@@ -396,7 +396,8 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(11.25rem, 1fr) 0.25rem minmax(11.25rem, 1fr);
+  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr) 0.25rem minmax(0, 1fr);
   align-items: center;
 }
 
@@ -407,34 +408,42 @@
 
 .ag-account-usage-windows {
   display: flex;
+  width: 100%;
   min-width: 0;
   flex-direction: column;
+  justify-content: center;
   gap: 0.25rem;
+}
+
+.ag-account-usage-windows--expanded {
+  gap: 0.1875rem;
 }
 
 .ag-account-usage-window-row {
   display: grid;
   height: 1.25rem;
   min-width: 0;
-  grid-template-columns: 1.375rem minmax(4.875rem, 1fr) 1.375rem 2.75rem;
+  grid-template-columns: 1.625rem minmax(2.5rem, 1fr) 1.375rem 2.75rem;
   align-items: center;
   gap: 0.125rem;
 }
 
 .ag-account-usage-window-label {
-  display: inline-block;
+  display: inline-flex;
   box-sizing: border-box;
-  width: auto !important;
-  min-width: 0 !important;
-  max-width: none;
+  width: 1.625rem !important;
+  min-width: 1.625rem !important;
+  max-width: 1.625rem;
+  align-items: center;
+  justify-content: center;
   justify-self: start;
   overflow: hidden;
   border-radius: 0.25rem;
-  padding: 0 0.1875rem;
+  padding: 0;
   font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1;
-  text-align: left;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -479,7 +488,7 @@
   display: inline-grid;
   height: 1.25rem;
   min-width: 0;
-  grid-template-columns: minmax(2.5rem, 0.9fr) minmax(2.75rem, 1.1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   align-items: center;
   gap: 0.125rem;
   border: 1px solid;
@@ -650,6 +659,20 @@
   min-height: var(--ag-accounts-table-row-height) !important;
   line-height: 1 !important;
   padding: 0 !important;
+}
+
+.ag-accounts-table-content :where([data-slot="table-body"] [data-slot="table-row"]:has(.ag-account-usage-windows--expanded),
+  [data-slot="tbody"] [data-slot="tr"]:has(.ag-account-usage-windows--expanded),
+  .table__body .table__row:has(.ag-account-usage-windows--expanded)) {
+  height: 6rem !important;
+  min-height: 6rem !important;
+}
+
+.ag-accounts-table-content :where([data-slot="table-body"] [data-slot="table-row"]:has(.ag-account-usage-windows--expanded) [data-slot="table-cell"],
+  [data-slot="tbody"] [data-slot="tr"]:has(.ag-account-usage-windows--expanded) [data-slot="td"],
+  .table__body .table__row:has(.ag-account-usage-windows--expanded) .table__cell) {
+  height: 6rem !important;
+  min-height: 6rem !important;
 }
 
 .ag-accounts-table-content :where([data-slot="table-body"] [data-slot="table-row"]:hover [data-slot="table-cell"],

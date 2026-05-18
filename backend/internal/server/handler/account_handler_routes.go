@@ -478,14 +478,35 @@ func (h *AccountHandler) GetAccountModels(c *gin.Context) {
 
 // GetAccountUsage 获取账号额度信息。
 func (h *AccountHandler) GetAccountUsage(c *gin.Context) {
-	usage, err := h.service.GetAccountUsage(c.Request.Context(), c.Query("platform"))
+	usage, refreshing, err := h.service.GetAccountUsage(c.Request.Context(), c.Query("platform"))
 	if err != nil {
 		httpCode, message := h.handleError("查询账号额度失败", "查询失败", err)
 		response.Error(c, httpCode, httpCode, message)
 		return
 	}
 
-	response.Success(c, map[string]any{"accounts": usage})
+	response.Success(c, map[string]any{
+		"accounts":   usage,
+		"refreshing": refreshing,
+	})
+}
+
+// GetSingleAccountUsage 获取单个账号额度信息。
+func (h *AccountHandler) GetSingleAccountUsage(c *gin.Context) {
+	id, err := parseAccountID(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "无效的账号 ID")
+		return
+	}
+
+	usage, err := h.service.GetSingleAccountUsage(c.Request.Context(), id)
+	if err != nil {
+		httpCode, message := h.handleError("查询账号额度失败", "查询失败", err)
+		response.Error(c, httpCode, httpCode, message)
+		return
+	}
+
+	response.Success(c, usage)
 }
 
 // GetCredentialsSchema 获取指定平台的凭证 schema。

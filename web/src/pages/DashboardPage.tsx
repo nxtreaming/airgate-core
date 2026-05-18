@@ -101,6 +101,14 @@ function fmtNum(n: number | undefined | null): string {
   return n.toLocaleString();
 }
 
+function fmtDurationMs(ms: number | undefined | null): string {
+  if (ms == null || ms <= 0) return '0s';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds >= 100) return `${Math.round(seconds)}s`;
+  return `${seconds.toFixed(seconds >= 10 ? 1 : 2)}s`;
+}
+
 function fmtTime(timeStr: string): string {
   if (timeStr.includes(' ')) {
     const time = timeStr.split(' ')[1] ?? '';
@@ -200,6 +208,8 @@ function StatsSkeleton() {
 
 function StatsCards({ stats }: { stats: DashboardStatsResp }) {
   const { t } = useTranslation();
+  const todayImageRequests = stats.today_image_requests ?? 0;
+  const todayTextRequests = Math.max(0, (stats.today_requests ?? 0) - todayImageRequests);
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:gap-4">
       <MetricCard
@@ -220,7 +230,8 @@ function StatsCards({ stats }: { stats: DashboardStatsResp }) {
         icon={<Activity className="h-5 w-5" />}
         tone="emerald"
         title={t('dashboard.today_requests')}
-        value={fmtNum(stats.today_requests)}
+        value={`${fmtNum(todayTextRequests)}/${fmtNum(todayImageRequests)}`}
+        valueSuffix={t('dashboard.image_suffix')}
         meta={t('dashboard.alltime_requests', { count: fmtNum(stats.alltime_requests) } as Record<string, string>)}
       />
       <MetricCard
@@ -228,7 +239,7 @@ function StatsCards({ stats }: { stats: DashboardStatsResp }) {
         tone="teal"
         title={t('dashboard.users')}
         value={t('dashboard.new_users', { count: stats.new_users_today })}
-        meta={t('dashboard.total_count', { count: stats.total_users })}
+        meta={`${t('dashboard.total_count', { count: stats.total_users })}  ${t('dashboard.active_users_label', { count: stats.active_users })}`}
       />
       <MetricCard
         icon={<Coins className="h-5 w-5" />}
@@ -259,8 +270,8 @@ function StatsCards({ stats }: { stats: DashboardStatsResp }) {
         icon={<Clock className="h-5 w-5" />}
         tone="rose"
         title={t('dashboard.avg_response')}
-        value={`${((stats.avg_duration_ms ?? 0) / 1000).toFixed(2)}s`}
-        meta={t('dashboard.active_users', { count: stats.active_users })}
+        value={`${fmtDurationMs(stats.avg_first_token_ms)}/${fmtDurationMs(stats.avg_duration_ms)}`}
+        meta={t('dashboard.image_response_time', { time: fmtDurationMs(stats.avg_image_duration_ms) })}
       />
     </div>
   );

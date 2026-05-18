@@ -43,7 +43,7 @@ export type AccountUsageInfo = {
   today_stats?: AccountUsageTodayStats | null;
   updated_at?: string;
 };
-export type AccountUsageData = { accounts?: Record<string, AccountUsageInfo> };
+export type AccountUsageData = { accounts?: Record<string, AccountUsageInfo>; refreshing?: boolean };
 export type CachedUsageWindow = {
   resetAtMs: number;
   usedPercent: number;

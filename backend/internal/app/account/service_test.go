@@ -521,6 +521,90 @@ func TestEnrichTodayStats_BatchesAllAccountsInOneQuery(t *testing.T) {
 	}
 }
 
+func TestGetAccountUsage_NoCacheReturnsSeededStatsWhileRefreshing(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 30, 0, 0, time.Local)
+	todayStart := time.Date(2026, 4, 14, 0, 0, 0, 0, time.Local).Unix()
+
+	repo := &windowStatsStub{
+		stubRepository: stubRepository{
+			listAll: func(_ context.Context, filter ListFilter) ([]Account, error) {
+				if filter.Platform != "openai" {
+					t.Fatalf("Platform = %q, want openai", filter.Platform)
+				}
+				return []Account{{ID: 55, Platform: "openai", Type: "apikey"}}, nil
+			},
+		},
+		byStart: map[int64]map[int]AccountWindowStats{
+			todayStart: {
+				55: {Requests: 3, Tokens: 1200, AccountCost: 0.05, UserCost: 0.02},
+			},
+		},
+	}
+	svc := NewService(repo, nil, nil, nil)
+	svc.now = func() time.Time { return now }
+
+	usage, refreshing, err := svc.GetAccountUsage(t.Context(), "openai")
+	if err != nil {
+		t.Fatalf("GetAccountUsage returned error: %v", err)
+	}
+	if !refreshing {
+		t.Fatalf("expected cache miss to report refreshing")
+	}
+	acct, ok := usage["55"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected seeded account 55, got %#v", usage["55"])
+	}
+	stats, ok := acct["today_stats"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected today_stats on seeded account")
+	}
+	if stats["requests"].(int64) != 3 {
+		t.Fatalf("requests = %v, want 3", stats["requests"])
+	}
+}
+
+func TestGetAccountUsage_ExpiredMemoryCacheReturnsStaleWindowsAndRefreshes(t *testing.T) {
+	now := time.Date(2026, 4, 14, 15, 30, 0, 0, time.Local)
+	repo := &windowStatsStub{
+		stubRepository: stubRepository{
+			listAll: func(context.Context, ListFilter) ([]Account, error) {
+				return []Account{{ID: 42, Platform: "openai", Type: "oauth"}}, nil
+			},
+		},
+		byStart: map[int64]map[int]AccountWindowStats{},
+	}
+	svc := NewService(repo, nil, nil, nil)
+	svc.now = func() time.Time { return now }
+	svc.setUsageMemoryCache("openai", map[string]AccountUsageInfo{
+		"42": {
+			Windows: []AccountUsageWindow{{
+				Key:          "5h",
+				Label:        "5h",
+				DisplayLabel: "5h",
+				Slot:         "5h",
+				Group:        "base",
+				UsedPercent:  27,
+			}},
+		},
+	}, now.Add(-time.Second))
+
+	usage, refreshing, err := svc.GetAccountUsage(t.Context(), "openai")
+	if err != nil {
+		t.Fatalf("GetAccountUsage returned error: %v", err)
+	}
+	if !refreshing {
+		t.Fatalf("expected stale cache to report refreshing")
+	}
+	acct := usage["42"].(map[string]any)
+	windows := acct["windows"].([]any)
+	if len(windows) != 1 {
+		t.Fatalf("expected stale window to be returned, got %d", len(windows))
+	}
+	if got := windows[0].(map[string]any)["used_percent"]; got != float64(27) {
+		t.Fatalf("used_percent = %v, want 27", got)
+	}
+}
+
 func TestExtractBodyError(t *testing.T) {
 	cases := []struct {
 		name string

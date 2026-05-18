@@ -733,6 +733,11 @@ func (s *Service) InvalidateUsageCache(platform string) {
 	s.deleteUsageCacheKeys(keys)
 }
 
+type accountUsageRequest struct {
+	ID          int               `json:"id"`
+	Credentials map[string]string `json:"credentials"`
+}
+
 // GetAccountUsage 查询账号当前用量视图。
 //
 // 分层缓存策略（重要）：
@@ -741,10 +746,10 @@ func (s *Service) InvalidateUsageCache(platform string) {
 //
 // 如果把 today_stats 和 upstream 数据一起缓存，刚写入的 usage_log 最多要等 5 分钟
 // 才会在账号列表里显示，和"实时监控"的预期不符。
-func (s *Service) GetAccountUsage(ctx context.Context, platform string) (map[string]any, error) {
-	base, err := s.getUpstreamUsage(ctx, platform)
+func (s *Service) GetAccountUsage(ctx context.Context, platform string) (map[string]any, bool, error) {
+	base, refreshing, err := s.getUpstreamUsage(ctx, platform)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// 浅克隆一份：后续把 today_stats 注入克隆体，避免污染缓存里那份"纯上游数据"。
@@ -759,7 +764,50 @@ func (s *Service) GetAccountUsage(ctx context.Context, platform string) (map[str
 	s.ensureAccountsSeeded(ctx, platform, result)
 
 	s.enrichTodayStats(ctx, result)
-	return result, nil
+	return result, refreshing, nil
+}
+
+// GetSingleAccountUsage 查询单个账号当前用量视图。
+//
+// 批量 usage 接口只负责快速返回已有缓存并在后台刷新；账号列表页再对当前页账号
+// 并发调用这个接口。这样某个账号探测完成后能单独更新，不需要等整个平台所有账号
+// 都查询完，也不需要前端短轮询后台刷新状态。
+func (s *Service) GetSingleAccountUsage(ctx context.Context, id int) (map[string]any, error) {
+	item, err := s.repo.FindByID(ctx, id, LoadOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	key := strconv.Itoa(item.ID)
+	accountUsage := map[string]any{}
+	if cached, _, ok := s.getUsageCacheForRead(ctx, item.Platform); ok {
+		if cachedInfo, exists := cached[key]; exists {
+			accountUsage = accountUsageInfoToMap(cachedInfo)
+		}
+	}
+
+	if item.Type != "apikey" {
+		queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		info, usageErrors, ok := s.fetchSingleAccountUsage(queryCtx, item)
+		cancel()
+
+		s.handleSingleAccountUsageErrors(ctx, item, usageErrors)
+		if ok {
+			normalized := normalizeAccountUsageInfo(info)
+			accountUsage = accountUsageInfoToMap(normalized)
+			s.updateSingleAccountUsageCache(ctx, item.Platform, key, normalized)
+			if item.State != "disabled" {
+				s.persistRateLimitFromWindows(ctx, map[string]any{key: accountUsage})
+			}
+		}
+	}
+
+	result := map[string]any{key: accountUsage}
+	s.enrichTodayStats(ctx, result)
+	if accountMap, ok := result[key].(map[string]any); ok {
+		return accountMap, nil
+	}
+	return map[string]any{}, nil
 }
 
 // ensureAccountsSeeded 确保所有账号（不论 status）都在 merged 里有占位条目。
@@ -790,18 +838,18 @@ func (s *Service) ensureAccountsSeeded(ctx context.Context, platform string, mer
 // getUpstreamUsage 拿到上游账号的 quota 窗口 / credits（Redis KV 缓存到最近 reset，最长 5h）。
 // 返回的 map 结构是 map[accountID]map[string]any，对齐 core 规范化后的 usage/accounts JSON 形态。
 // 这一层不包含 today_stats，由调用方单独注入。
-func (s *Service) getUpstreamUsage(ctx context.Context, platform string) (map[string]any, error) {
+func (s *Service) getUpstreamUsage(ctx context.Context, platform string) (map[string]any, bool, error) {
 	cacheKey := usageCachePlatformKey(platform)
-	if cached, ok := s.getUsageCache(ctx, cacheKey); ok {
-		return accountUsageInfosToMap(cached), nil
+	if cached, fresh, ok := s.getUsageCacheForRead(ctx, cacheKey); ok {
+		refreshing := !fresh || s.isUsageRefreshRunning(cacheKey)
+		if !fresh {
+			s.ensureUsageCacheRefresh(platform)
+		}
+		return accountUsageInfosToMap(cached), refreshing, nil
 	}
 
-	merged, err := s.fetchUpstreamUsageDedup(ctx, platform)
-	if err != nil {
-		return nil, err
-	}
-	s.setUsageCache(ctx, cacheKey, merged)
-	return accountUsageInfosToMap(merged), nil
+	s.ensureUsageCacheRefresh(platform)
+	return map[string]any{}, true, nil
 }
 
 // fetchUpstreamUsageDedup 用 singleflight 合并同一 platform 的并发上游探测。
@@ -841,11 +889,6 @@ func (s *Service) fetchUpstreamUsage(ctx context.Context, platform string) (map[
 				queries = append(queries, platformQuery{platform: meta.Platform, inst: inst})
 			}
 		}
-	}
-
-	type accountUsageRequest struct {
-		ID          int               `json:"id"`
-		Credentials map[string]string `json:"credentials"`
 	}
 
 	merged := make(map[string]AccountUsageInfo)
@@ -938,6 +981,99 @@ func (s *Service) fetchUpstreamUsage(ctx context.Context, platform string) (map[
 	return merged, nil
 }
 
+func (s *Service) fetchSingleAccountUsage(ctx context.Context, item Account) (AccountUsageInfo, []accountUsageError, bool) {
+	if s.plugins == nil {
+		return AccountUsageInfo{}, nil, false
+	}
+	inst := s.plugins.GetPluginByPlatform(item.Platform)
+	if inst == nil || inst.Gateway == nil {
+		return AccountUsageInfo{}, nil, false
+	}
+
+	req := accountUsageRequest{
+		ID:          item.ID,
+		Credentials: cloneStringMap(item.Credentials),
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return AccountUsageInfo{}, nil, false
+	}
+
+	status, _, respBody, err := inst.Gateway.HandleHTTPRequest(ctx, "POST", "usage/probe", "", nil, body)
+	if err == nil && status == http.StatusOK {
+		info, usageErrors, ok := parseSingleAccountUsagePluginResponse(item.ID, respBody)
+		if ok || len(usageErrors) > 0 {
+			return info, usageErrors, ok
+		}
+	}
+
+	body, err = json.Marshal([]accountUsageRequest{req})
+	if err != nil {
+		return AccountUsageInfo{}, nil, false
+	}
+	status, _, respBody, err = inst.Gateway.HandleHTTPRequest(ctx, "POST", "usage/accounts", "", nil, body)
+	if err != nil || status != http.StatusOK {
+		return AccountUsageInfo{}, nil, false
+	}
+	return parseSingleAccountUsagePluginResponse(item.ID, respBody)
+}
+
+func parseSingleAccountUsagePluginResponse(id int, body []byte) (AccountUsageInfo, []accountUsageError, bool) {
+	var accountsResp accountUsagePluginResponse
+	if err := json.Unmarshal(body, &accountsResp); err == nil {
+		accountKey := strconv.Itoa(id)
+		if info, ok := accountsResp.Accounts[accountKey]; ok {
+			return normalizeAccountUsageInfo(info), accountsResp.Errors, true
+		}
+		if len(accountsResp.Errors) > 0 {
+			return AccountUsageInfo{}, accountsResp.Errors, false
+		}
+	}
+
+	var directResp AccountUsageInfo
+	if err := json.Unmarshal(body, &directResp); err != nil {
+		return AccountUsageInfo{}, nil, false
+	}
+	directResp = normalizeAccountUsageInfo(directResp)
+	if directResp.UpdatedAt == "" && len(directResp.Windows) == 0 && directResp.Credits == nil {
+		return AccountUsageInfo{}, nil, false
+	}
+	return directResp, nil, true
+}
+
+func (s *Service) handleSingleAccountUsageErrors(ctx context.Context, item Account, usageErrors []accountUsageError) {
+	if s.stateWriter == nil || item.UpstreamIsPool || item.State == "disabled" {
+		return
+	}
+	for _, usageErr := range usageErrors {
+		if usageErr.ID != item.ID || usageErr.Message == "" {
+			continue
+		}
+		s.stateWriter.MarkDisabled(ctx, item.ID, usageErr.Message)
+		return
+	}
+}
+
+func (s *Service) updateSingleAccountUsageCache(ctx context.Context, platform, accountKey string, info AccountUsageInfo) {
+	for _, cacheKey := range usageCacheKeysForInvalidation(platform) {
+		cached, _, ok := s.getUsageCacheForRead(ctx, cacheKey)
+		if !ok {
+			continue
+		}
+		next := cloneAccountUsageInfoMap(cached)
+		next[accountKey] = info
+		s.setUsageCache(ctx, cacheKey, next)
+	}
+}
+
+func cloneAccountUsageInfoMap(src map[string]AccountUsageInfo) map[string]AccountUsageInfo {
+	dst := make(map[string]AccountUsageInfo, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
+}
+
 func usageCachePlatformKey(platform string) string {
 	platform = strings.TrimSpace(platform)
 	if platform == "" {
@@ -958,23 +1094,24 @@ func usageCacheRedisKey(cacheKey string) string {
 	return "airgate:account_usage:v1:" + usageCachePlatformKey(cacheKey)
 }
 
-func (s *Service) getUsageCache(ctx context.Context, cacheKey string) (map[string]AccountUsageInfo, bool) {
+func (s *Service) getUsageCacheForRead(ctx context.Context, cacheKey string) (map[string]AccountUsageInfo, bool, bool) {
 	cacheKey = usageCachePlatformKey(cacheKey)
 	if accounts, expiresAt, ok := s.getUsageCacheFromRedis(ctx, cacheKey); ok {
 		s.setUsageMemoryCache(cacheKey, accounts, expiresAt)
-		return accounts, true
+		return accounts, true, true
 	}
 
 	now := s.now()
 	s.usageMu.RLock()
 	entry, ok := s.usageCache[cacheKey]
-	if ok && now.Before(entry.expiresAt) {
+	if ok {
 		data := entry.data
+		fresh := now.Before(entry.expiresAt)
 		s.usageMu.RUnlock()
-		return data, true
+		return data, fresh, true
 	}
 	s.usageMu.RUnlock()
-	return nil, false
+	return nil, false, false
 }
 
 func (s *Service) getUsageCacheFromRedis(ctx context.Context, cacheKey string) (map[string]AccountUsageInfo, time.Time, bool) {
@@ -1073,10 +1210,20 @@ func (s *Service) deleteAllUsageCacheKeys() {
 }
 
 func (s *Service) refreshUsageCacheAsync(platform string) {
+	s.startUsageCacheRefresh(platform, true)
+}
+
+func (s *Service) ensureUsageCacheRefresh(platform string) {
+	s.startUsageCacheRefresh(platform, false)
+}
+
+func (s *Service) startUsageCacheRefresh(platform string, queueIfRunning bool) {
 	cacheKey := usageCachePlatformKey(platform)
 	s.usageRefreshMu.Lock()
 	if _, running := s.usageRefreshRunning[cacheKey]; running {
-		s.usageRefreshPending[cacheKey] = true
+		if queueIfRunning {
+			s.usageRefreshPending[cacheKey] = true
+		}
 		s.usageRefreshMu.Unlock()
 		return
 	}
@@ -1084,6 +1231,14 @@ func (s *Service) refreshUsageCacheAsync(platform string) {
 	s.usageRefreshMu.Unlock()
 
 	go s.runUsageCacheRefreshLoop(platform, cacheKey)
+}
+
+func (s *Service) isUsageRefreshRunning(cacheKey string) bool {
+	cacheKey = usageCachePlatformKey(cacheKey)
+	s.usageRefreshMu.Lock()
+	_, running := s.usageRefreshRunning[cacheKey]
+	s.usageRefreshMu.Unlock()
+	return running
 }
 
 func (s *Service) runUsageCacheRefreshLoop(platform, cacheKey string) {

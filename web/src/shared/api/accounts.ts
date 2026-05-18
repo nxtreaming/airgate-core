@@ -43,7 +43,10 @@ export const accountsApi = {
   testUrl: (id: number) => `/api/v1/admin/accounts/${id}/test`,
   // 获取指定平台账号的用量窗口（core 规范化插件返回契约后输出）
   usage: (platform: string) =>
-    get<{ accounts: Record<string, any> }>('/api/v1/admin/accounts/usage', { platform }),
+    get<{ accounts: Record<string, any>; refreshing?: boolean }>('/api/v1/admin/accounts/usage', { platform }),
+  // 获取单个账号用量窗口。账号页会对当前页账号并发查询，单个账号返回后即可刷新对应行。
+  usageOne: (id: number, options?: { signal?: AbortSignal }) =>
+    get<Record<string, any>>(`/api/v1/admin/accounts/${id}/usage`, undefined, options),
   credentialsSchema: (platform: string) =>
     get<CredentialSchemaResp>(`/api/v1/admin/accounts/credentials-schema/${platform}`),
   // 手动刷新账号额度（调用插件 QueryQuota）。

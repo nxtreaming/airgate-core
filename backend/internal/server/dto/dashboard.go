@@ -12,8 +12,9 @@ type DashboardStatsResp struct {
 	ErrorAccounts   int64 `json:"error_accounts"`
 
 	// 请求
-	TodayRequests   int64 `json:"today_requests"`
-	AllTimeRequests int64 `json:"alltime_requests"` //nolint:misspell
+	TodayRequests      int64 `json:"today_requests"`
+	TodayImageRequests int64 `json:"today_image_requests"`
+	AllTimeRequests    int64 `json:"alltime_requests"` //nolint:misspell
 
 	// 用户
 	TotalUsers    int64 `json:"total_users"`
@@ -30,10 +31,12 @@ type DashboardStatsResp struct {
 	AllTimeStandardCost float64 `json:"alltime_standard_cost"` //nolint:misspell
 
 	// 性能指标
-	RPM           float64 `json:"rpm"`
-	TPM           float64 `json:"tpm"`
-	AvgDurationMs float64 `json:"avg_duration_ms"`
-	ActiveUsers   int64   `json:"active_users"`
+	RPM                float64 `json:"rpm"`
+	TPM                float64 `json:"tpm"`
+	AvgFirstTokenMs    float64 `json:"avg_first_token_ms"`
+	AvgDurationMs      float64 `json:"avg_duration_ms"`
+	AvgImageDurationMs float64 `json:"avg_image_duration_ms"`
+	ActiveUsers        int64   `json:"active_users"`
 }
 
 // DashboardStatsReq 仪表盘统计查询参数

@@ -10,10 +10,15 @@ func TestStatsComputesDerivedMetrics(t *testing.T) {
 	service := NewService(dashboardStubRepository{
 		loadStatsSnapshot: func(_ context.Context, _, _ time.Time) (StatsSnapshot, error) {
 			return StatsSnapshot{
-				TodayRequests:   4,
-				TodayDurationMs: 1000,
-				RecentRequests:  10,
-				RecentTokens:    500,
+				TodayRequests:           6,
+				TodayImageRequests:      2,
+				TodayNonImageRequests:   4,
+				TodayNonImageDurationMs: 1000,
+				TodayFirstTokenRequests: 2,
+				TodayFirstTokenMs:       300,
+				TodayImageDurationMs:    240000,
+				RecentRequests:          10,
+				RecentTokens:            500,
 			}, nil
 		},
 	})
@@ -24,6 +29,15 @@ func TestStatsComputesDerivedMetrics(t *testing.T) {
 	}
 	if result.AvgDurationMs != 250 {
 		t.Fatalf("AvgDurationMs = %v, want 250", result.AvgDurationMs)
+	}
+	if result.AvgFirstTokenMs != 150 {
+		t.Fatalf("AvgFirstTokenMs = %v, want 150", result.AvgFirstTokenMs)
+	}
+	if result.AvgImageDurationMs != 120000 {
+		t.Fatalf("AvgImageDurationMs = %v, want 120000", result.AvgImageDurationMs)
+	}
+	if result.TodayImageRequests != 2 {
+		t.Fatalf("TodayImageRequests = %v, want 2", result.TodayImageRequests)
 	}
 	if result.RPM != 2 {
 		t.Fatalf("RPM = %v, want 2", result.RPM)
