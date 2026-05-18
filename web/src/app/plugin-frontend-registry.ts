@@ -37,7 +37,6 @@ function createComponentRegistry<TProps extends object>() {
 }
 
 const platformIconRegistry = createComponentRegistry<PluginPlatformIconProps>();
-const usageWindowRegistry = createComponentRegistry<AccountSurfaceProps>();
 const accountIdentityRegistry = createComponentRegistry<AccountSurfaceProps>();
 const usageMetricDetailRegistry = createComponentRegistry<UsageRecordSurfaceProps>();
 const usageModelMetaRegistry = createComponentRegistry<UsageRecordSurfaceProps>();
@@ -49,7 +48,8 @@ export function registerPluginFrontendModule(
 ) {
   if (mod.platformIcon) registerPlatformIcon(platform, mod.platformIcon);
   if (mod.accountIdentity) registerAccountIdentity(platform, mod.accountIdentity);
-  if (mod.accountUsageWindow) registerUsageWindow(platform, mod.accountUsageWindow);
+  // 账号用量窗口现由 core 统一渲染（基于规范化后的 display_label/slot/group 契约），
+  // 不再消费插件 export 的 accountUsageWindow。SDK 类型暂保留，便于未来需要时恢复。
   if (mod.usageModelMeta) registerUsageModelMeta(platform, mod.usageModelMeta);
   if (mod.usageMetricDetail) registerUsageMetricDetail(platform, mod.usageMetricDetail);
   if (mod.usageCostDetail) registerUsageCostDetail(platform, mod.usageCostDetail);
@@ -70,27 +70,6 @@ export function getPluginPlatformIcon(
 
 export function onPlatformIconChange(listener: RegistryListener): () => void {
   return platformIconRegistry.subscribe(listener);
-}
-
-export function registerUsageWindow(
-  platform: string,
-  component: ComponentType<AccountSurfaceProps>,
-) {
-  usageWindowRegistry.register(platform, component);
-}
-
-export function getPluginUsageWindow(
-  platform: string,
-): ComponentType<AccountSurfaceProps> | undefined {
-  return usageWindowRegistry.get(platform);
-}
-
-export function subscribeUsageWindowChange(listener: RegistryListener): () => void {
-  return usageWindowRegistry.subscribe(listener);
-}
-
-export function getUsageWindowVersion(): number {
-  return usageWindowRegistry.getVersion();
 }
 
 export function registerAccountIdentity(
