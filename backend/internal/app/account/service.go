@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 
 	sdk "github.com/DouDOU-start/airgate-sdk/sdkgo"
 
@@ -80,6 +81,11 @@ type Service struct {
 	usageRefreshMu      sync.Mutex
 	usageRefreshRunning map[string]struct{}
 	usageRefreshPending map[string]bool
+
+	// usageFlight 把同 platform 的并发 fetch 合并为一次上游调用：
+	// invalidate→refresh 与同时穿透缓存的同步请求共享同一次结果，
+	// 既减小插件压力，又避免两路写回 setUsageCache 的最后一次写覆盖。
+	usageFlight singleflight.Group
 }
 
 // NewService 创建账号服务。
@@ -790,12 +796,24 @@ func (s *Service) getUpstreamUsage(ctx context.Context, platform string) (map[st
 		return accountUsageInfosToMap(cached), nil
 	}
 
-	merged, err := s.fetchUpstreamUsage(ctx, platform)
+	merged, err := s.fetchUpstreamUsageDedup(ctx, platform)
 	if err != nil {
 		return nil, err
 	}
 	s.setUsageCache(ctx, cacheKey, merged)
 	return accountUsageInfosToMap(merged), nil
+}
+
+// fetchUpstreamUsageDedup 用 singleflight 合并同一 platform 的并发上游探测。
+// 注意：成功后返回的 map 在并发调用之间共享，调用方禁止就地修改。
+func (s *Service) fetchUpstreamUsageDedup(ctx context.Context, platform string) (map[string]AccountUsageInfo, error) {
+	v, err, _ := s.usageFlight.Do(usageCachePlatformKey(platform), func() (any, error) {
+		return s.fetchUpstreamUsage(ctx, platform)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(map[string]AccountUsageInfo), nil
 }
 
 func (s *Service) fetchUpstreamUsage(ctx context.Context, platform string) (map[string]AccountUsageInfo, error) {
@@ -1069,9 +1087,23 @@ func (s *Service) refreshUsageCacheAsync(platform string) {
 }
 
 func (s *Service) runUsageCacheRefreshLoop(platform, cacheKey string) {
+	// 兜底：任何一次 fetch panic 都不能让该 platform 的 refresh 永久卡死。
+	// 必须先解除 running/pending 标记，再 recover；否则下次 refreshUsageCacheAsync
+	// 会以为还在跑、把请求挂到 pending 上等一个不会发生的回合。
+	defer func() {
+		s.usageRefreshMu.Lock()
+		delete(s.usageRefreshRunning, cacheKey)
+		delete(s.usageRefreshPending, cacheKey)
+		s.usageRefreshMu.Unlock()
+		if r := recover(); r != nil {
+			slog.Error("account_usage_cache_refresh_panic",
+				sdk.LogFieldPlatform, platform,
+				"panic", r)
+		}
+	}()
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-		accounts, err := s.fetchUpstreamUsage(ctx, platform)
+		accounts, err := s.fetchUpstreamUsageDedup(ctx, platform)
 		if err == nil {
 			s.setUsageCache(ctx, cacheKey, accounts)
 		} else {
