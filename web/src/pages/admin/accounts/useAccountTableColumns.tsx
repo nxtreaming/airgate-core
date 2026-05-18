@@ -12,6 +12,7 @@ import {
   AccountRowActions,
   AccountSchedulingSwitch,
   AccountStatusCell,
+  useUsageResetClock,
   type AccountTableColumn,
   type AccountUsageCredits,
   type AccountUsageData,
@@ -57,6 +58,7 @@ export function useAccountTableColumns({
   const { toast } = useToast();
   const usageDataRef = useRef(usageData);
   usageDataRef.current = usageData;
+  const resetNow = useUsageResetClock(Boolean(usageData?.accounts));
 
   const accountActionLabels = useMemo(() => ({
     actions: t('common.actions'),
@@ -282,12 +284,12 @@ export function useAccountTableColumns({
         }
 
         const getResetSeconds = (w: AccountUsageWindow) => {
+          if (w.reset_at) {
+            const delta = Date.parse(w.reset_at) - resetNow;
+            if (Number.isFinite(delta)) return Math.max(0, Math.floor(delta / 1000));
+          }
           if (typeof w.reset_seconds === 'number') return w.reset_seconds;
           if (typeof w.reset_after_seconds === 'number') return w.reset_after_seconds;
-          if (w.reset_at) {
-            const delta = Date.parse(w.reset_at) - Date.now();
-            if (Number.isFinite(delta) && delta > 0) return Math.floor(delta / 1000);
-          }
           return 0;
         };
 
@@ -564,6 +566,7 @@ export function useAccountTableColumns({
     platformName,
     platformsKey,
     queryClient,
+    resetNow,
     t,
     toast,
     usageData?.accounts,

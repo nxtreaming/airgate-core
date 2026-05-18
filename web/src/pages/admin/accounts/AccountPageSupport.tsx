@@ -712,6 +712,41 @@ function useCooldownClock(enabled: boolean): number {
   );
 }
 
+let usageResetClockNow = Date.now();
+let usageResetClockTimer: number | null = null;
+const usageResetClockListeners = new Set<() => void>();
+
+function subscribeUsageResetClock(listener: () => void) {
+  usageResetClockNow = Date.now();
+  usageResetClockListeners.add(listener);
+  if (usageResetClockTimer == null) {
+    usageResetClockTimer = window.setInterval(() => {
+      usageResetClockNow = Date.now();
+      usageResetClockListeners.forEach((notify) => notify());
+    }, 30_000);
+  }
+
+  return () => {
+    usageResetClockListeners.delete(listener);
+    if (usageResetClockListeners.size === 0 && usageResetClockTimer != null) {
+      window.clearInterval(usageResetClockTimer);
+      usageResetClockTimer = null;
+    }
+  };
+}
+
+function getUsageResetClockSnapshot() {
+  return usageResetClockNow;
+}
+
+export function useUsageResetClock(enabled: boolean): number {
+  return useSyncExternalStore(
+    enabled ? subscribeUsageResetClock : subscribeIdleClock,
+    getUsageResetClockSnapshot,
+    getUsageResetClockSnapshot,
+  );
+}
+
 /**
  * AccountStatusCell 渲染账号状态徽标，按 state + state_until 动态展示：
  *   active       → 绿色 "活跃"
