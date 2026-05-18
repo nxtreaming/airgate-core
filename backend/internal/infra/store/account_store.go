@@ -38,10 +38,7 @@ func accountKeywordMatches(keyword string) predicate.Account {
 	)
 }
 
-// List 查询账号列表。
-func (s *AccountStore) List(ctx context.Context, filter appaccount.ListFilter) ([]appaccount.Account, int64, error) {
-	query := s.db.Account.Query()
-
+func applyAccountListFilters(query *ent.AccountQuery, filter appaccount.ListFilter) *ent.AccountQuery {
 	if filter.Keyword != "" {
 		query = query.Where(accountKeywordMatches(filter.Keyword))
 	}
@@ -54,6 +51,9 @@ func (s *AccountStore) List(ctx context.Context, filter appaccount.ListFilter) (
 	if filter.AccountType != "" {
 		query = query.Where(entaccount.TypeEQ(filter.AccountType))
 	}
+	if filter.Credential != nil {
+		query = query.Where(accountCredentialStringMatches(*filter.Credential))
+	}
 	if filter.GroupID != nil {
 		query = query.Where(entaccount.HasGroupsWith(entgroup.ID(*filter.GroupID)))
 	} else if filter.Ungrouped {
@@ -62,6 +62,52 @@ func (s *AccountStore) List(ctx context.Context, filter appaccount.ListFilter) (
 	if filter.ProxyID != nil {
 		query = query.Where(entaccount.HasProxyWith(entproxy.IDEQ(*filter.ProxyID)))
 	}
+	if len(filter.IDs) > 0 {
+		query = query.Where(entaccount.IDIn(filter.IDs...))
+	}
+	return query
+}
+
+func accountCredentialStringMatches(filter appaccount.CredentialStringFilter) predicate.Account {
+	values := nonEmptyStrings(filter.Values)
+	if filter.Key == "" || len(values) == 0 {
+		return entaccount.IDEQ(-1)
+	}
+
+	predicates := make([]predicate.Account, 0, 3)
+	if filter.Platform != "" {
+		predicates = append(predicates, entaccount.PlatformEQ(filter.Platform))
+	}
+	if filter.AccountType != "" {
+		predicates = append(predicates, entaccount.TypeEQ(filter.AccountType))
+	}
+	predicates = append(predicates, func(s *sql.Selector) {
+		valuePredicates := make([]*sql.Predicate, 0, len(values))
+		for _, value := range values {
+			if filter.MatchMode == "contains" {
+				valuePredicates = append(valuePredicates, sqljson.StringContains(entaccount.FieldCredentials, value, sqljson.Path(filter.Key)))
+			} else {
+				valuePredicates = append(valuePredicates, sqljson.ValueEQ(entaccount.FieldCredentials, value, sqljson.Path(filter.Key)))
+			}
+		}
+		s.Where(sql.Or(valuePredicates...))
+	})
+	return entaccount.And(predicates...)
+}
+
+func nonEmptyStrings(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+// List 查询账号列表。
+func (s *AccountStore) List(ctx context.Context, filter appaccount.ListFilter) ([]appaccount.Account, int64, error) {
+	query := applyAccountListFilters(s.db.Account.Query(), filter)
 
 	total, err := query.Count(ctx)
 	if err != nil {
@@ -84,31 +130,7 @@ func (s *AccountStore) List(ctx context.Context, filter appaccount.ListFilter) (
 
 // ListAll 查询符合筛选条件的全部账号（不分页，用于导出）。
 func (s *AccountStore) ListAll(ctx context.Context, filter appaccount.ListFilter) ([]appaccount.Account, error) {
-	query := s.db.Account.Query()
-
-	if filter.Keyword != "" {
-		query = query.Where(accountKeywordMatches(filter.Keyword))
-	}
-	if filter.Platform != "" {
-		query = query.Where(entaccount.PlatformEQ(filter.Platform))
-	}
-	if filter.State != "" {
-		query = query.Where(entaccount.StateEQ(entaccount.State(filter.State)))
-	}
-	if filter.AccountType != "" {
-		query = query.Where(entaccount.TypeEQ(filter.AccountType))
-	}
-	if filter.GroupID != nil {
-		query = query.Where(entaccount.HasGroupsWith(entgroup.ID(*filter.GroupID)))
-	} else if filter.Ungrouped {
-		query = query.Where(entaccount.Not(entaccount.HasGroups()))
-	}
-	if filter.ProxyID != nil {
-		query = query.Where(entaccount.HasProxyWith(entproxy.IDEQ(*filter.ProxyID)))
-	}
-	if len(filter.IDs) > 0 {
-		query = query.Where(entaccount.IDIn(filter.IDs...))
-	}
+	query := applyAccountListFilters(s.db.Account.Query(), filter)
 
 	accounts, err := query.
 		WithGroups().

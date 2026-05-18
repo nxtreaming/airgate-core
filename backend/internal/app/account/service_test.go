@@ -158,16 +158,92 @@ func TestShouldAutoRefreshQuotaSkipsPureAPIKeyAccounts(t *testing.T) {
 	}
 }
 
+func TestListResolvesPluginOAuthPlanFilter(t *testing.T) {
+	var captured ListFilter
+	service := NewService(stubRepository{
+		list: func(_ context.Context, filter ListFilter) ([]Account, int64, error) {
+			captured = filter
+			return nil, 0, nil
+		},
+	}, stubPluginCatalog{
+		metas: []plugin.PluginMeta{{
+			Platform: "kiro",
+			Metadata: map[string]string{
+				oauthPlanMetadataKey: `[{"key":"pro","label":"Pro","credential_key":"plan_type","match":"contains","matches":["Builder Id Pro"]}]`,
+			},
+		}},
+	}, noOpConcurrency{}, nil)
+
+	_, err := service.List(t.Context(), ListFilter{
+		Page:        1,
+		PageSize:    20,
+		Platform:    "kiro",
+		AccountType: oauthPlanFilterID("kiro", "pro"),
+	})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if captured.AccountType != "" {
+		t.Fatalf("captured AccountType = %q, want empty after virtual filter resolution", captured.AccountType)
+	}
+	if captured.Credential == nil {
+		t.Fatal("captured Credential is nil")
+	}
+	if captured.Credential.Platform != "kiro" ||
+		captured.Credential.AccountType != "oauth" ||
+		captured.Credential.Key != "plan_type" ||
+		captured.Credential.MatchMode != "contains" ||
+		len(captured.Credential.Values) != 1 ||
+		captured.Credential.Values[0] != "Builder Id Pro" {
+		t.Fatalf("captured Credential = %+v", captured.Credential)
+	}
+}
+
+func TestListKeepsUnknownOAuthPlanFilterExact(t *testing.T) {
+	var captured ListFilter
+	service := NewService(stubRepository{
+		list: func(_ context.Context, filter ListFilter) ([]Account, int64, error) {
+			captured = filter
+			return nil, 0, nil
+		},
+	}, stubPluginCatalog{}, noOpConcurrency{}, nil)
+
+	_, err := service.List(t.Context(), ListFilter{Page: 1, PageSize: 20, AccountType: oauthPlanFilterID("openai", "plus")})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if captured.AccountType != oauthPlanFilterID("openai", "plus") {
+		t.Fatalf("captured AccountType = %q, want unresolved virtual filter to remain exact", captured.AccountType)
+	}
+	if captured.Credential != nil {
+		t.Fatalf("captured Credential = %+v, want nil", captured.Credential)
+	}
+}
+
 type stubRepository struct {
 	create   func(context.Context, CreateInput) (Account, error)
 	findByID func(context.Context, int, LoadOptions) (Account, error)
+	list     func(context.Context, ListFilter) ([]Account, int64, error)
+	listAll  func(context.Context, ListFilter) ([]Account, error)
 }
 
-func (s stubRepository) List(context.Context, ListFilter) ([]Account, int64, error) {
+type noOpConcurrency struct{}
+
+func (noOpConcurrency) GetCurrentCounts(context.Context, []int) map[int]int {
+	return map[int]int{}
+}
+
+func (s stubRepository) List(ctx context.Context, filter ListFilter) ([]Account, int64, error) {
+	if s.list != nil {
+		return s.list(ctx, filter)
+	}
 	return nil, 0, nil
 }
 
-func (s stubRepository) ListAll(context.Context, ListFilter) ([]Account, error) {
+func (s stubRepository) ListAll(ctx context.Context, filter ListFilter) ([]Account, error) {
+	if s.listAll != nil {
+		return s.listAll(ctx, filter)
+	}
 	return nil, nil
 }
 
@@ -255,13 +331,14 @@ func (s *stubStateWriter) ManualDisable(_ context.Context, accountID int, reason
 
 type stubPluginCatalog struct {
 	models []sdk.ModelInfo
+	metas  []plugin.PluginMeta
 }
 
 func (s stubPluginCatalog) GetPluginByPlatform(string) *plugin.PluginInstance { return nil }
 func (s stubPluginCatalog) GetModels(string) []sdk.ModelInfo                  { return s.models }
 func (s stubPluginCatalog) GetAccountTypes(string) []sdk.AccountType          { return nil }
 func (s stubPluginCatalog) GetCredentialFields(string) []sdk.CredentialField  { return nil }
-func (s stubPluginCatalog) GetAllPluginMeta() []plugin.PluginMeta             { return nil }
+func (s stubPluginCatalog) GetAllPluginMeta() []plugin.PluginMeta             { return s.metas }
 
 type windowStatsStub struct {
 	stubRepository

@@ -12,6 +12,7 @@ type PluginResp struct {
 	FrontendPages      []FrontendPageResp `json:"frontend_pages,omitempty"`
 	InstructionPresets []string           `json:"instruction_presets,omitempty"`
 	ConfigSchema       []ConfigFieldResp  `json:"config_schema,omitempty"`
+	Metadata           map[string]string  `json:"metadata,omitempty"`
 	HasWebAssets       bool               `json:"has_web_assets"`
 	IsDev              bool               `json:"is_dev"`
 }

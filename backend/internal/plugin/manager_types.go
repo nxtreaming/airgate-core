@@ -27,6 +27,7 @@ type PluginInstance struct {
 	Type               string // "gateway", "extension", "middleware"
 	InstructionPresets []string
 	ConfigSchema       []sdk.ConfigField
+	Metadata           map[string]string
 	Capabilities       []string // 插件声明的 host capability 列表（仅展示用）
 	Priority           int32    // 仅对 type=middleware 生效，决定 chain 顺序
 
@@ -97,6 +98,7 @@ type PluginMeta struct {
 	FrontendPages      []sdk.FrontendPage
 	InstructionPresets []string
 	ConfigSchema       []sdk.ConfigField
+	Metadata           map[string]string
 	Config             map[string]string
 	HasWebAssets       bool
 	IsDev              bool

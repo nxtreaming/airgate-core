@@ -713,6 +713,7 @@ export interface PluginResp {
     description?: string;
     placeholder?: string;
   }>;
+  metadata?: Record<string, string>;
   instruction_presets?: string[];
   has_web_assets?: boolean;
   is_dev?: boolean;

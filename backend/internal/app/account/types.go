@@ -87,10 +87,21 @@ type ListFilter struct {
 	Platform    string
 	State       string // active / rate_limited / degraded / disabled
 	AccountType string
+	Credential  *CredentialStringFilter
 	GroupID     *int
 	Ungrouped   bool
 	ProxyID     *int
 	IDs         []int
+}
+
+// CredentialStringFilter 表示由插件声明的账号 credentials 字段筛选。
+// Core 只理解通用匹配方式，具体字段和值由插件 metadata 决定。
+type CredentialStringFilter struct {
+	Platform    string
+	AccountType string
+	Key         string
+	Values      []string
+	MatchMode   string // exact / contains
 }
 
 // ListResult 账号列表结果。
