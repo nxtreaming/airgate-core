@@ -89,8 +89,20 @@
   text-overflow: ellipsis;
 }
 
+.ag-api-keys-table .ag-api-key-metric-chip--zero {
+  background: var(--ag-default-bg) !important;
+}
+
 .ag-api-keys-table .ag-api-key-metric-dollar--warning {
   color: var(--ag-warning);
+}
+
+.ag-api-keys-table .ag-api-key-metric-dollar--success {
+  color: var(--ag-success);
+}
+
+.ag-api-keys-table .ag-api-key-metric-dollar--accent {
+  color: var(--ag-primary);
 }
 
 .ag-api-keys-table .ag-api-key-metric-infinity {

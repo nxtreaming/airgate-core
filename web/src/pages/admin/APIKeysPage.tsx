@@ -234,12 +234,16 @@ export default function APIKeysPage() {
                         {
                           amount: row.today_cost,
                           color: 'warning',
+                          dollarTone: 'warning',
                           label: t('api_keys.today', '今日'),
+                          mutedWhenZero: true,
                         },
                         {
                           amount: row.thirty_day_cost,
                           color: 'warning',
+                          dollarTone: 'warning',
                           label: t('api_keys.thirty_days', '近30天'),
+                          mutedWhenZero: true,
                         },
                       ]}
                     />

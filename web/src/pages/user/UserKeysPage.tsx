@@ -182,7 +182,8 @@ export default function UserKeysPage() {
       const payload: UpdateAPIKeyReq = {
         name: form.name,
         group_id: form.group_id ? Number(form.group_id) : undefined,
-        quota_usd: form.quota_usd ? Number(form.quota_usd) : undefined,
+        // 空字符串显式改为 0 = 无限配额；省略字段只表示不修改旧配额
+        quota_usd: form.quota_usd.trim() ? Number(form.quota_usd) : 0,
         sell_rate: form.sell_rate ? Number(form.sell_rate) : 0,
         // 空字符串显式改为 0 = 关闭并发限制；后端看到 0 会清除旧值
         max_concurrency: form.max_concurrency ? Number(form.max_concurrency) : 0,
@@ -423,11 +424,13 @@ export default function UserKeysPage() {
                         {
                           amount: row.used_quota_actual || 0,
                           color: 'default',
+                          dollarTone: 'warning',
                           label: t('user_keys.cost_actual', '成本'),
                         },
                         {
                           amount: profit,
                           color: 'default',
+                          dollarTone: 'success',
                           label: t('user_keys.profit', '利润'),
                         },
                       ]}
@@ -440,12 +443,16 @@ export default function UserKeysPage() {
                         {
                           amount: row.today_cost,
                           color: 'warning',
+                          dollarTone: 'warning',
                           label: t('api_keys.today', '今日'),
+                          mutedWhenZero: true,
                         },
                         {
                           amount: row.thirty_day_cost,
                           color: 'warning',
+                          dollarTone: 'warning',
                           label: t('api_keys.thirty_days', '近30天'),
+                          mutedWhenZero: true,
                         },
                       ]}
                     />
