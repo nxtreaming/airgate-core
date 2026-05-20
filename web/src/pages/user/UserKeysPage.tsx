@@ -17,6 +17,7 @@ import { getTotalPages } from '../../shared/utils/pagination';
 import { TablePaginationFooter } from '../../shared/components/TablePaginationFooter';
 import { TableLoadingRow } from '../../shared/components/TableLoadingRow';
 import { CommonTable } from '../../shared/components/CommonTable';
+import { APIKeyMetricChips } from '../../shared/components/APIKeyMetricChips';
 import { useClipboard } from '../../shared/hooks/useClipboard';
 import { useCopyFeedback } from '../../shared/hooks/useCopyFeedback';
 import {
@@ -313,9 +314,9 @@ export default function UserKeysPage() {
           <CommonTable.Column id="key_prefix">{t('user_keys.title')}</CommonTable.Column>
           <CommonTable.Column id="group_id">{t('user_keys.group')}</CommonTable.Column>
           <CommonTable.Column id="status">{t('common.status')}</CommonTable.Column>
-          <CommonTable.Column id="quota">{t('user_keys.quota_label')}</CommonTable.Column>
-          <CommonTable.Column id="markup">{t('user_keys.markup_title', '销售/成本')}</CommonTable.Column>
-          <CommonTable.Column id="usage">{t('api_keys.usage')}</CommonTable.Column>
+          <CommonTable.Column id="quota" style={{ width: '17.5rem' }}>{t('user_keys.quota_label')}</CommonTable.Column>
+          <CommonTable.Column id="markup" style={{ width: '10.75rem' }}>{t('user_keys.markup_title', '销售/成本')}</CommonTable.Column>
+          <CommonTable.Column id="usage" style={{ width: '10.75rem' }}>{t('api_keys.usage')}</CommonTable.Column>
           <CommonTable.Column id="expires_at">{t('user_keys.expires_at')}</CommonTable.Column>
           <CommonTable.Column id="actions" style={{ width: 132 }}>
             {t('common.actions')}
@@ -392,49 +393,62 @@ export default function UserKeysPage() {
                     <StatusChip status={displayStatus} />
                   </CommonTable.Cell>
                   <CommonTable.Cell>
-                    <span className="font-mono">
-                      {row.quota_usd > 0 ? (
-                        <>
-                          ${row.used_quota.toFixed(4)} / ${row.quota_usd.toFixed(4)}
-                        </>
-                      ) : (
-                        <span className="text-text-tertiary">{t('user_keys.quota_unlimited_hint')}</span>
-                      )}
-                    </span>
+                    <APIKeyMetricChips
+                      className="ag-api-key-metric-chips--quota"
+                      items={[
+                        {
+                          amount: row.used_quota,
+                          color: 'warning',
+                          highlightDollar: true,
+                          label: t('user_keys.quota_used_short', '已使用'),
+                        },
+                        {
+                          amount: row.quota_usd > 0 ? row.quota_usd : undefined,
+                          color: 'success',
+                          label: t('user_keys.quota_total_short', '总配额'),
+                          value: '∞',
+                        },
+                      ]}
+                    />
                   </CommonTable.Cell>
                   <CommonTable.Cell>
-                    {!row.sell_rate || row.sell_rate <= 0 ? (
-                      <span className="text-text-tertiary text-xs">—</span>
-                    ) : (
-                      <div className="font-mono text-xs space-y-0.5">
-                        <div>
-                          <span className="text-text-tertiary">{t('user_keys.sell_rate_short', '倍率')}: </span>
-                          <span>{row.sell_rate.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="text-text-tertiary">{t('user_keys.cost_actual', '成本')}: </span>
-                          <span>${(row.used_quota_actual || 0).toFixed(4)}</span>
-                        </div>
-                        <div>
-                          <span className="text-text-tertiary">{t('user_keys.profit', '利润')}: </span>
-                          <span style={{ color: profit > 0 ? 'var(--ag-success)' : undefined }}>
-                            ${profit.toFixed(4)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    <APIKeyMetricChips
+                      className="ag-api-key-metric-chips--stack ag-api-key-metric-chips--markup"
+                      items={[
+                        {
+                          color: 'default',
+                          label: t('user_keys.sell_rate_short', '倍率'),
+                          value: hasSellRate ? row.sell_rate.toFixed(2) : '—',
+                        },
+                        {
+                          amount: row.used_quota_actual || 0,
+                          color: 'default',
+                          label: t('user_keys.cost_actual', '成本'),
+                        },
+                        {
+                          amount: profit,
+                          color: 'default',
+                          label: t('user_keys.profit', '利润'),
+                        },
+                      ]}
+                    />
                   </CommonTable.Cell>
                   <CommonTable.Cell>
-                    <div className="font-mono text-xs space-y-0.5">
-                      <div>
-                        <span className="text-text-tertiary">{t('api_keys.today')}: </span>
-                        <span style={{ color: 'var(--ag-primary)' }}>${row.today_cost.toFixed(4)}</span>
-                      </div>
-                      <div>
-                        <span className="text-text-tertiary">{t('api_keys.thirty_days')}: </span>
-                        <span>${row.thirty_day_cost.toFixed(4)}</span>
-                      </div>
-                    </div>
+                    <APIKeyMetricChips
+                      className="ag-api-key-metric-chips--stack ag-api-key-metric-chips--usage"
+                      items={[
+                        {
+                          amount: row.today_cost,
+                          color: 'warning',
+                          label: t('api_keys.today', '今日'),
+                        },
+                        {
+                          amount: row.thirty_day_cost,
+                          color: 'warning',
+                          label: t('api_keys.thirty_days', '近30天'),
+                        },
+                      ]}
+                    />
                   </CommonTable.Cell>
                   <CommonTable.Cell>
                     {row.expires_at
