@@ -153,6 +153,64 @@ func TestListTasksFiltersByPluginID(t *testing.T) {
 	}
 }
 
+func TestListTasksStripsHeavyInputFields(t *testing.T) {
+	ctx := context.Background()
+	db := enttest.Open(t, "sqlite3", "file:list_tasks_slim?mode=memory&cache=shared&_fk=1", enttest.WithMigrateOptions(schema.WithGlobalUniqueID(false)))
+	t.Cleanup(func() { _ = db.Close() })
+
+	host := &HostService{db: db}
+	created, err := host.createTask(ctx, "gateway-openai", hostCreateTaskRequest{
+		UserID:   42,
+		TaskType: "image.edit",
+		Input: map[string]interface{}{
+			"prompt": "make it blue",
+			"model":  "gpt-image-1",
+			"size":   "1024x1024",
+			"images": []interface{}{"data:image/png;base64,AAAA"},
+			"mask":   "data:image/png;base64,BBBB",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	taskID := int64(created["task"].(map[string]interface{})["id"].(int64))
+
+	got, err := host.listTasks(ctx, "gateway-openai", hostListTasksRequest{UserID: 42, Limit: 20})
+	if err != nil {
+		t.Fatalf("list tasks: %v", err)
+	}
+	tasks := got["tasks"].([]map[string]interface{})
+	if len(tasks) != 1 {
+		t.Fatalf("tasks len = %d, want 1", len(tasks))
+	}
+	input, ok := tasks[0]["input"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("input type = %T", tasks[0]["input"])
+	}
+	if _, present := input["images"]; present {
+		t.Fatalf("list response must omit input.images, got: %+v", input)
+	}
+	if _, present := input["mask"]; present {
+		t.Fatalf("list response must omit input.mask, got: %+v", input)
+	}
+	if input["prompt"] != "make it blue" || input["model"] != "gpt-image-1" || input["size"] != "1024x1024" {
+		t.Fatalf("list response stripped too much, got: %+v", input)
+	}
+
+	// tasks.get must still return the full input for callers that need it.
+	full, err := host.getTask(ctx, "gateway-openai", hostGetTaskRequest{UserID: 42, TaskID: taskID})
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	fullInput := full["task"].(map[string]interface{})["input"].(map[string]interface{})
+	if _, present := fullInput["images"]; !present {
+		t.Fatalf("get response must keep input.images, got: %+v", fullInput)
+	}
+	if _, present := fullInput["mask"]; !present {
+		t.Fatalf("get response must keep input.mask, got: %+v", fullInput)
+	}
+}
+
 func TestCheckHostForwardBalance(t *testing.T) {
 	ctx := context.Background()
 	db := enttest.Open(t, "sqlite3", "file:host_forward_balance?mode=memory&cache=shared&_fk=1", enttest.WithMigrateOptions(schema.WithGlobalUniqueID(false)))

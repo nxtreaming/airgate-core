@@ -131,6 +131,26 @@ func taskToPayload(t *ent.Task) map[string]interface{} {
 	return resp
 }
 
+// taskToListPayload returns a slim version of taskToPayload suitable for list
+// responses. It drops heavy input fields (img2img source images, inpaint masks)
+// that may carry multi-MB base64 data URIs and would otherwise blow past the
+// 64 MB gRPC message limit once a user accumulates a handful of edit tasks.
+// Callers that need the full input must use tasks.get on the specific task.
+func taskToListPayload(t *ent.Task) map[string]interface{} {
+	payload := taskToPayload(t)
+	if input, ok := payload["input"].(map[string]interface{}); ok && len(input) > 0 {
+		slim := make(map[string]interface{}, len(input))
+		for k, v := range input {
+			if k == "images" || k == "mask" {
+				continue
+			}
+			slim[k] = v
+		}
+		payload["input"] = slim
+	}
+	return payload
+}
+
 func publicTaskID(t *ent.Task) string {
 	if t == nil || t.PublicTaskID == nil {
 		return ""
@@ -349,7 +369,7 @@ func (h *HostService) listTasks(ctx context.Context, pluginID string, req hostLi
 
 	items := make([]map[string]interface{}, 0, len(tasks))
 	for _, t := range tasks {
-		items = append(items, taskToPayload(t))
+		items = append(items, taskToListPayload(t))
 	}
 	return map[string]interface{}{"tasks": items, "total": total}, nil
 }
