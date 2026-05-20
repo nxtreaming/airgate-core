@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const accountUsageCacheVersion = 1
+const accountUsageCacheVersion = 2
 
 type AccountUsageWindow struct {
 	Key               string  `json:"key,omitempty"`
@@ -154,6 +154,124 @@ func normalizeAccountUsageWindow(window AccountUsageWindow) (AccountUsageWindow,
 		return AccountUsageWindow{}, false
 	}
 	return window, true
+}
+
+func mergeAccountUsageInfo(existing, incoming AccountUsageInfo, now time.Time) AccountUsageInfo {
+	merged := incoming
+	if merged.UpdatedAt == "" {
+		merged.UpdatedAt = existing.UpdatedAt
+	}
+	if merged.Credits == nil {
+		merged.Credits = existing.Credits
+	}
+	if len(existing.Windows) == 0 {
+		return merged
+	}
+	if len(merged.Windows) == 0 {
+		merged.Windows = liveAccountUsageWindows(existing.Windows, now)
+		return merged
+	}
+
+	existingByID := make(map[string]AccountUsageWindow, len(existing.Windows))
+	for _, window := range existing.Windows {
+		id := accountUsageWindowIdentity(window)
+		if id == "" {
+			continue
+		}
+		existingByID[id] = window
+	}
+
+	windows := make([]AccountUsageWindow, 0, len(merged.Windows)+len(existingByID))
+	seen := make(map[string]struct{}, len(merged.Windows))
+	for _, window := range merged.Windows {
+		id := accountUsageWindowIdentity(window)
+		if id != "" {
+			if cached, ok := existingByID[id]; ok {
+				window = mergeAccountUsageWindow(cached, window, now)
+			}
+			seen[id] = struct{}{}
+		}
+		windows = append(windows, window)
+	}
+	for _, window := range existing.Windows {
+		id := accountUsageWindowIdentity(window)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		resetAt, ok := accountUsageWindowResetAt(window, now)
+		if !ok || !resetAt.After(now) {
+			continue
+		}
+		windows = append(windows, windowWithResetAt(window, resetAt, now))
+	}
+	merged.Windows = windows
+	return merged
+}
+
+func liveAccountUsageWindows(windows []AccountUsageWindow, now time.Time) []AccountUsageWindow {
+	result := make([]AccountUsageWindow, 0, len(windows))
+	for _, window := range windows {
+		resetAt, ok := accountUsageWindowResetAt(window, now)
+		if !ok || !resetAt.After(now) {
+			continue
+		}
+		result = append(result, windowWithResetAt(window, resetAt, now))
+	}
+	return result
+}
+
+func mergeAccountUsageWindow(existing, incoming AccountUsageWindow, now time.Time) AccountUsageWindow {
+	merged := incoming
+	if merged.Label == "" {
+		merged.Label = existing.Label
+	}
+	if merged.DisplayLabel == "" {
+		merged.DisplayLabel = existing.DisplayLabel
+	}
+	if merged.Slot == "" {
+		merged.Slot = existing.Slot
+	}
+	if merged.Group == "" {
+		merged.Group = existing.Group
+	}
+	if merged.UpdatedAt == "" {
+		merged.UpdatedAt = existing.UpdatedAt
+	}
+	if merged.ResetAt == "" && merged.ResetSeconds <= 0 && merged.ResetAfterSeconds <= 0 {
+		if resetAt, ok := accountUsageWindowResetAt(existing, now); ok && resetAt.After(now) {
+			merged = windowWithResetAt(merged, resetAt, now)
+		}
+	}
+	return merged
+}
+
+func windowWithResetAt(window AccountUsageWindow, resetAt, now time.Time) AccountUsageWindow {
+	window.ResetAt = resetAt.UTC().Format(time.RFC3339)
+	remaining := resetAt.Sub(now)
+	if remaining > 0 {
+		window.ResetSeconds = int64(remaining.Seconds())
+		window.ResetAfterSeconds = window.ResetSeconds
+	}
+	return window
+}
+
+func accountUsageWindowIdentity(window AccountUsageWindow) string {
+	if key := strings.TrimSpace(window.Key); key != "" {
+		return key
+	}
+	group := strings.TrimSpace(window.Group)
+	slot := normalizeUsageWindowToken(window.Slot)
+	if group != "" || slot != "" {
+		label := strings.TrimSpace(window.DisplayLabel)
+		if label == "" {
+			label = strings.TrimSpace(window.Label)
+		}
+		return group + ":" + slot + ":" + label
+	}
+	return strings.TrimSpace(window.Label)
 }
 
 func inferUsageWindowDisplayLabel(key, label, slot string) string {

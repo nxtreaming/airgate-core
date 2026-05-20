@@ -780,8 +780,12 @@ func (s *Service) GetSingleAccountUsage(ctx context.Context, id int) (map[string
 
 	key := strconv.Itoa(item.ID)
 	accountUsage := map[string]any{}
+	var cachedInfo AccountUsageInfo
+	var hasCachedInfo bool
 	if cached, _, ok := s.getUsageCacheForRead(ctx, item.Platform); ok {
-		if cachedInfo, exists := cached[key]; exists {
+		if info, exists := cached[key]; exists {
+			cachedInfo = info
+			hasCachedInfo = true
 			accountUsage = accountUsageInfoToMap(cachedInfo)
 		}
 	}
@@ -792,6 +796,9 @@ func (s *Service) GetSingleAccountUsage(ctx context.Context, id int) (map[string
 		s.handleSingleAccountUsageErrors(ctx, item, usageErrors)
 		if ok {
 			normalized := normalizeAccountUsageInfo(info)
+			if hasCachedInfo {
+				normalized = mergeAccountUsageInfo(cachedInfo, normalized, s.now())
+			}
 			accountUsage = accountUsageInfoToMap(normalized)
 			s.updateSingleAccountUsageCache(ctx, item.Platform, key, normalized)
 			if item.State != "disabled" {
@@ -1089,6 +1096,7 @@ func (s *Service) updateSingleAccountUsageCache(ctx context.Context, platform, a
 		snapshot map[string]AccountUsageInfo
 	}
 	var pending []pendingWrite
+	now := s.now()
 
 	s.usageMu.Lock()
 	for _, raw := range usageCacheKeysForInvalidation(platform) {
@@ -1098,8 +1106,16 @@ func (s *Service) updateSingleAccountUsageCache(ctx context.Context, platform, a
 			continue
 		}
 		next := cloneAccountUsageInfoMap(entry.data)
-		next[accountKey] = info
-		s.usageCache[cacheKey] = &usageCacheEntry{data: next, expiresAt: entry.expiresAt}
+		if existing, ok := next[accountKey]; ok {
+			next[accountKey] = mergeAccountUsageInfo(existing, info, now)
+		} else {
+			next[accountKey] = info
+		}
+		expiresAt := usageCacheExpiresAt(next, now)
+		if expiresAt.Sub(now) < usageCacheMinimumTTL {
+			expiresAt = now.Add(usageCacheMinimumTTL)
+		}
+		s.usageCache[cacheKey] = &usageCacheEntry{data: next, expiresAt: expiresAt}
 		pending = append(pending, pendingWrite{cacheKey: cacheKey, snapshot: next})
 	}
 	s.usageMu.Unlock()
@@ -1211,6 +1227,7 @@ func (s *Service) getUsageCacheFromRedis(ctx context.Context, cacheKey string) (
 func (s *Service) setUsageCache(ctx context.Context, cacheKey string, accounts map[string]AccountUsageInfo) {
 	cacheKey = usageCachePlatformKey(cacheKey)
 	now := s.now()
+	accounts = s.mergeUsageCacheAccounts(cacheKey, accounts, now)
 	expiresAt := usageCacheExpiresAt(accounts, now)
 	ttl := expiresAt.Sub(now)
 	if ttl < usageCacheMinimumTTL {
@@ -1229,6 +1246,25 @@ func (s *Service) setUsageCache(ctx context.Context, cacheKey string, accounts m
 	if err := s.usageRedis.Set(ctx, usageCacheRedisKey(cacheKey), body, ttl).Err(); err != nil {
 		slog.Debug("account_usage_cache_set_failed", "cache_key", cacheKey, sdk.LogFieldError, err)
 	}
+}
+
+func (s *Service) mergeUsageCacheAccounts(cacheKey string, accounts map[string]AccountUsageInfo, now time.Time) map[string]AccountUsageInfo {
+	s.usageMu.RLock()
+	entry, ok := s.usageCache[usageCachePlatformKey(cacheKey)]
+	if !ok {
+		s.usageMu.RUnlock()
+		return accounts
+	}
+	existing := entry.data
+	s.usageMu.RUnlock()
+
+	merged := cloneAccountUsageInfoMap(accounts)
+	for key, info := range accounts {
+		if existingInfo, ok := existing[key]; ok {
+			merged[key] = mergeAccountUsageInfo(existingInfo, info, now)
+		}
+	}
+	return merged
 }
 
 func (s *Service) setUsageMemoryCache(cacheKey string, accounts map[string]AccountUsageInfo, expiresAt time.Time) {
