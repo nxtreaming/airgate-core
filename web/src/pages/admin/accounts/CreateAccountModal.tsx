@@ -49,7 +49,7 @@ export function CreateAccountModal({
   const [accountType, setAccountType] = useState('');
   const [form, setForm] = useState<Omit<CreateAccountReq, 'platform' | 'credentials' | 'type'>>({
     name: '',
-    priority: 0,
+    priority: 50,
     max_concurrency: DEFAULT_ACCOUNT_MAX_CONCURRENCY,
     rate_multiplier: 1,
   });
@@ -92,7 +92,7 @@ export function CreateAccountModal({
     if (open) return;
     setPlatform('');
     setAccountType('');
-    setForm({ name: '', priority: 0, max_concurrency: DEFAULT_ACCOUNT_MAX_CONCURRENCY, rate_multiplier: 1, upstream_is_pool: false });
+    setForm({ name: '', priority: 50, max_concurrency: DEFAULT_ACCOUNT_MAX_CONCURRENCY, rate_multiplier: 1, upstream_is_pool: false });
     setCredentials({});
     setGroupIds([]);
     setBatchMode(false);
@@ -122,7 +122,7 @@ export function CreateAccountModal({
       platform,
       type: a.type || 'oauth',
       credentials: a.credentials,
-      priority: form.priority ?? 0,
+      priority: form.priority ?? 50,
       max_concurrency: form.max_concurrency ?? DEFAULT_ACCOUNT_MAX_CONCURRENCY,
       rate_multiplier: form.rate_multiplier ?? 1,
       group_ids: groupIds.length ? groupIds : undefined,
@@ -152,7 +152,7 @@ export function CreateAccountModal({
   const handleClose = () => {
     setPlatform('');
     setAccountType('');
-    setForm({ name: '', priority: 0, max_concurrency: DEFAULT_ACCOUNT_MAX_CONCURRENCY, rate_multiplier: 1, upstream_is_pool: false });
+    setForm({ name: '', priority: 50, max_concurrency: DEFAULT_ACCOUNT_MAX_CONCURRENCY, rate_multiplier: 1, upstream_is_pool: false });
     setCredentials({});
     setGroupIds([]);
     setBatchMode(false);
