@@ -1,4 +1,4 @@
-import { useMemo, useRef, type MouseEvent } from 'react';
+import { useMemo, useRef, type CSSProperties, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
@@ -7,7 +7,6 @@ import { accountsApi } from '../../../shared/api/accounts';
 import { queryKeys } from '../../../shared/queryKeys';
 import type { AccountResp } from '../../../shared/types';
 import { PlatformIcon, useToast } from '../../../shared/ui';
-import { GROUP_CHIP_STYLE } from '../../../shared/components/groupChipStyle';
 import {
   AccountCapacityChip,
   AccountRowActions,
@@ -22,6 +21,12 @@ import {
 } from './AccountPageSupport';
 
 type QuotaRefreshResult = Awaited<ReturnType<typeof accountsApi.refreshQuota>>;
+
+const ACCOUNT_GROUP_CARD_STYLE: CSSProperties = {
+  background: 'var(--ag-bg-surface)',
+  border: '1px solid var(--ag-glass-border)',
+  color: 'var(--ag-text-secondary)',
+};
 
 type UseAccountTableColumnsArgs = {
   applyQuotaRefreshResult: (id: number, result: QuotaRefreshResult) => void;
@@ -145,7 +150,7 @@ export function useAccountTableColumns({
               <span
                 key={name}
                 className="ag-account-group-chip"
-                style={GROUP_CHIP_STYLE}
+                style={ACCOUNT_GROUP_CARD_STYLE}
               >
                 {name}
               </span>
@@ -153,7 +158,7 @@ export function useAccountTableColumns({
             {hiddenCount > 0 ? (
               <span
                 className="ag-account-group-chip ag-account-group-chip--more"
-                style={GROUP_CHIP_STYLE}
+                style={ACCOUNT_GROUP_CARD_STYLE}
               >
                 +{hiddenCount}
               </span>
