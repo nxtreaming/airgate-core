@@ -170,14 +170,14 @@ function MetricCard({
         <div className="ag-dashboard-metric-copy">
           <div className="truncate text-sm font-semibold tracking-normal text-text-tertiary">{title}</div>
           <div className="mt-1 flex min-w-0 items-baseline gap-2">
-            <div className="flex min-w-0 items-baseline font-mono text-[22px] font-semibold leading-none text-text 2xl:text-2xl">
+            <div className="flex min-w-0 items-baseline font-mono text-xl font-semibold leading-none text-text 2xl:text-2xl">
               {value}
-              {valueSuffix ? <span className="ml-1.5 text-sm font-medium text-text-tertiary">{valueSuffix}</span> : null}
+              {valueSuffix ? <span className="ml-1.5 text-xs font-medium text-text-tertiary 2xl:text-sm">{valueSuffix}</span> : null}
             </div>
             <div className={`min-w-0 truncate text-xs font-semibold ${META_TONE_CLASSES[metaTone]}`}>{meta}</div>
           </div>
         </div>
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--field-radius)] ring-1 shadow-sm 2xl:h-11 2xl:w-11 ${METRIC_TONE_CLASSES[tone]}`}>
+        <span className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-[var(--field-radius)] ring-1 shadow-sm 2xl:flex ${METRIC_TONE_CLASSES[tone]}`}>
           {icon}
         </span>
       </Card.Content>
@@ -198,7 +198,7 @@ function StatsSkeleton() {
                 <Skeleton className="h-3 w-32" />
               </div>
             </div>
-            <Skeleton className="h-10 w-10 shrink-0 rounded-[var(--field-radius)]" />
+            <Skeleton className="hidden h-11 w-11 shrink-0 rounded-[var(--field-radius)] 2xl:block" />
           </Card.Content>
         </Card>
       ))}
