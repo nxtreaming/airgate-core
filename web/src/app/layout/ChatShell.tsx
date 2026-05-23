@@ -1,5 +1,4 @@
 import { type ReactNode, useEffect } from 'react';
-import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@heroui/react';
 import { useAuth } from '../providers/AuthProvider';
@@ -8,7 +7,6 @@ import { setStoredLanguage } from '../../i18n';
 import { useTheme } from '../providers/ThemeProvider';
 import { useSiteSettings, defaultLogoUrl } from '../providers/SiteSettingsProvider';
 import {
-  ArrowLeft,
   LogOut,
   Languages,
   Sun,
@@ -21,7 +19,7 @@ interface ChatShellProps {
 }
 
 /**
- * 全屏沉浸式布局：仅一条窄顶栏（返回控制台 + 用户/主题/语言/退出），
+ * 全屏沉浸式布局：仅一条窄顶栏（用户/主题/语言/退出），
  * 主区高度填满视口，不限制宽度、不加内边距。供 /chat 等需要最大化使用空间的页面挂载。
  */
 export function ChatShell({ children }: ChatShellProps) {
@@ -54,17 +52,6 @@ export function ChatShell({ children }: ChatShellProps) {
     <div className="flex flex-col h-screen" style={{ height: '100dvh' }}>
       <header className="flex items-center justify-between h-12 px-3 md:px-4 border-b border-border bg-bg shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <Link
-            to="/"
-            className="flex items-center gap-1.5 h-8 px-2 rounded-[10px] text-text-tertiary hover:text-text hover:bg-bg-hover transition-colors"
-            title={t('nav.back_to_console')}
-          >
-            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
-            <span className="text-[12px] font-medium hidden sm:inline">
-              {t('nav.back_to_console')}
-            </span>
-          </Link>
-          <div className="w-px h-4 bg-border mx-1" />
           <img
             src={site.site_logo || defaultLogoUrl}
             alt=""
