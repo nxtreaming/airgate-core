@@ -52,18 +52,14 @@ function getUseKeyConfig(
     } else {
       // Codex CLI 配置 — 写入 ~/.codex/config.toml 与 ~/.codex/auth.json
       const configDir = shell === 'unix' ? '~/.codex' : '%userprofile%\\.codex';
-      const configToml = `model_provider = "OpenAI"
-model = "gpt-5.4"
-review_model = "gpt-5.4"
+      const configToml = `model_provider = "airgate"
+model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 disable_response_storage = true
-network_access = "enabled"
-windows_wsl_setup_acknowledged = true
-model_context_window = 1000000
-model_auto_compact_token_limit = 900000
 
-[model_providers.OpenAI]
-name = "OpenAI"
+[model_providers]
+[model_providers.airgate]
+name = "airgate"
 base_url = "${baseUrl}"
 wire_api = "responses"
 requires_openai_auth = true`;
