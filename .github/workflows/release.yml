@@ -29,14 +29,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Set up pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.1.1 --activate
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Build core frontend
         run: cd web && pnpm install --frozen-lockfile && pnpm run build
